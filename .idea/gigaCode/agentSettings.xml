@@ -312,6 +312,9 @@
         <Execute>
           <option name="pattern" value="&quot;C:\Users\vovaw\AppData\Local\Android\Sdk\platform-tools\adb.exe&quot; -H 127.0.0.1 -P 5037 -s adb-AR5FVB6605001018-QSqQxb._adb-tls-connect._tcp install H:\diplom\Christmastrees\app\build\outputs\apk\debug\app-debug.apk" />
         </Execute>
+        <Execute>
+          <option name="pattern" value="&quot;C:\Users\vovaw\AppData\Local\Android\Sdk\platform-tools\adb.exe&quot; -H 127.0.0.1 -P 5037 -s adb-AR5FVB6605001018-QSqQxb._adb-tls-connect._tcp shell logcat -s MarkersViewModel:V" />
+        </Execute>
       </list>
     </option>
     <option name="autoApprovedReads">

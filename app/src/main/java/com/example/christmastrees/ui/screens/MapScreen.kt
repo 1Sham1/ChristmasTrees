@@ -6,6 +6,7 @@ import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
+import android.graphics.Rect
 import android.graphics.drawable.BitmapDrawable
 import android.os.Handler
 import android.os.Looper
@@ -15,18 +16,22 @@ import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.WbSunny
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.snapshotFlow
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
@@ -40,9 +45,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
-import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.christmastrees.data.MarkerType
 import com.example.christmastrees.ui.components.MarkerPickerBottomSheet
+import com.example.christmastrees.ui.components.SnowfallOverlay
 import com.example.christmastrees.viewmodel.MarkersViewModel
 import org.osmdroid.tileprovider.tilesource.TileSourceFactory
 import org.osmdroid.util.GeoPoint
@@ -52,11 +57,18 @@ import org.osmdroid.views.overlay.Marker as OsmdroidMarker
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MapScreen(
-    viewModel: MarkersViewModel = viewModel()
+    viewModel: MarkersViewModel = MarkersViewModel.LocalMarkersViewModel.current ?: throw IllegalStateException("MarkersViewModel not provided")
 ) {
     val context = LocalContext.current
-    val uiState by viewModel.uiState.collectAsState()
+    val uiState = viewModel.uiState
+    val markers = viewModel.markers
     var showPicker by remember { mutableStateOf(false) }
+    
+    // Global counters from uiState - reactive
+    val treesCount by derivedStateOf { uiState.treesCount }
+    val snowmenCount by derivedStateOf { uiState.snowmenCount }
+    val decorationsCount by derivedStateOf { uiState.decorationsCount }
+    
     val pendingMarkerType = remember { mutableStateOf<MarkerType?>(null) }
     val mapReady = remember { mutableStateOf(false) }
     val userLocation = remember { mutableStateOf<GeoPoint?>(null) }
@@ -65,48 +77,56 @@ fun MapScreen(
     val prefs = context.getSharedPreferences("map_settings", android.content.Context.MODE_PRIVATE)
     var selectedMarkerId by remember { mutableStateOf<Long?>(null) }
     var showContextMenu by remember { mutableStateOf(false) }
-    var contextMenuPosition by remember { mutableStateOf(android.graphics.PointF(0f, 0f)) }
-    var showLocationButton by remember { mutableStateOf(true) }
+    var contextMenuMarkerName by remember { mutableStateOf("") }
+    var contextMenuMarkerQuantity by remember { mutableStateOf("") }
     
-    // Compute counters reactively at TOP of composable
-    val markers = uiState.markers
-    val treesCount by remember(markers) { derivedStateOf { markers.count { it.markerType() == MarkerType.CHRISTMAS_TREE } } }
-    val snowmenCount by remember(markers) { derivedStateOf { markers.count { it.markerType() == MarkerType.SNOWMAN } } }
-    val decorationsCount by remember(markers) { derivedStateOf { markers.count { it.markerType() == MarkerType.CITY_DECORATION } } }
+    // Drag mode state - activated from context menu
+    var isDraggingMarker by remember { mutableStateOf(false) }
+    var draggingMarkerId by remember { mutableStateOf<Long?>(null) }
+    var dragStartPos by remember { mutableStateOf<GeoPoint?>(null) }
     
-    // Function to refresh all markers on the map
-    fun refreshMapMarkers() {
-        val mapView = mapViewRef.value ?: return
-        try {
-            // Remove all custom markers (keep user location marker)
-            val markersToRemove = mutableListOf<OsmdroidMarker>()
-            for (overlay in mapView.overlays) {
-                if (overlay is OsmdroidMarker && overlay.title != null && overlay.title != "Вы здесь") {
-                    markersToRemove.add(overlay)
+    // Owner search hint
+    var showOwnerSearchHint by remember { mutableStateOf(false) }
+    
+    // Reactive marker updates on map
+    LaunchedEffect(markers) {
+        val mapView = mapViewRef.value ?: return@LaunchedEffect
+        Handler(Looper.getMainLooper()).post {
+            try {
+                // Remove all custom markers (keep user location marker)
+                val markersToRemove = mutableListOf<OsmdroidMarker>()
+                for (overlay in mapView.overlays) {
+                    if (overlay is OsmdroidMarker && overlay.title != null && overlay.title != "Вы здесь") {
+                        markersToRemove.add(overlay)
+                    }
                 }
-            }
-            mapView.overlays.removeAll(markersToRemove)
-            
-            // Re-add all markers from ViewModel state
-            for (marker in markers) {
-                val type = marker.markerType()
-                val latLng = GeoPoint(marker.latitude, marker.longitude)
-                val bitmap = createMarkerBitmap(type.emoji)
+                mapView.overlays.removeAll(markersToRemove)
                 
-                val markerIcon = BitmapDrawable(mapView.resources, bitmap)
-                val osmdroidMarker = OsmdroidMarker(mapView).apply {
-                    position = latLng
-                    setIcon(markerIcon)
-                    setAnchor(OsmdroidMarker.ANCHOR_CENTER, OsmdroidMarker.ANCHOR_BOTTOM)
-                    title = marker.id.toString()
-                    snippet = "${type.emoji} x${marker.quantity}"
+                // Re-add all markers from ViewModel state
+                for (marker in markers) {
+                    val type = marker.markerType()
+                    val latLng = GeoPoint(marker.latitude, marker.longitude)
+                    val bitmap = createMarkerBitmapWithQuantity(type.emoji, marker.quantity)
+                    
+                    val markerIcon = BitmapDrawable(mapView.resources, bitmap)
+                    val osmdroidMarker = OsmdroidMarker(mapView).apply {
+                        position = latLng
+                        setIcon(markerIcon)
+                        setAnchor(OsmdroidMarker.ANCHOR_CENTER, OsmdroidMarker.ANCHOR_BOTTOM)
+                        title = marker.id.toString()
+                        // NO snippet - prevents popup
+                        setOnMarkerClickListener { clickedMarker, _ ->
+                            // Handled by touch listener
+                            false
+                        }
+                    }
+                    mapView.overlays.add(osmdroidMarker)
                 }
-                mapView.overlays.add(osmdroidMarker)
+                
+                mapView.invalidate()
+            } catch (e: Exception) {
+                e.printStackTrace()
             }
-            
-            mapView.invalidate()
-        } catch (e: Exception) {
-            e.printStackTrace()
         }
     }
 
@@ -141,7 +161,7 @@ fun MapScreen(
                     val mapView = mapViewRef.value ?: return@post
                     val type = newMarker.markerType()
                     val latLng = GeoPoint(newMarker.latitude, newMarker.longitude)
-                    val bitmap = createMarkerBitmap(type.emoji)
+                    val bitmap = createMarkerBitmapWithQuantity(type.emoji, newMarker.quantity)
                     
                     val markerIcon = BitmapDrawable(mapView.resources, bitmap)
                     val osmdroidMarker = OsmdroidMarker(mapView).apply {
@@ -149,7 +169,7 @@ fun MapScreen(
                         setIcon(markerIcon)
                         setAnchor(OsmdroidMarker.ANCHOR_CENTER, OsmdroidMarker.ANCHOR_BOTTOM)
                         title = newMarker.id.toString()
-                        snippet = type.emoji
+                        setOnMarkerClickListener { _, _ -> false }
                     }
                     mapView.overlays.add(osmdroidMarker)
                     mapView.invalidate()
@@ -160,14 +180,8 @@ fun MapScreen(
         }
     }
     
-    // Hide context menu when tapping elsewhere
-    if (showContextMenu) {
-        LaunchedEffect(Unit) {
-            // Auto-hide after 3 seconds
-            delay(3000)
-            showContextMenu = false
-        }
-    }
+    // Save marker state when context menu is opened (to close it on tap outside)
+    var contextMenuOpenedMarkerId by remember { mutableStateOf<Long?>(null) }
 
     Box(modifier = Modifier.fillMaxSize()) {
         AndroidView(
@@ -181,17 +195,6 @@ fun MapScreen(
                         ctx,
                         TileSourceFactory.MAPNIK
                     )
-                    
-                    // Debug: show toast with tile provider info
-                    Handler(Looper.getMainLooper()).post {
-                        Toast.makeText(ctx, "W:${mapView.width} H:${mapView.height} Z:${mapView.zoomLevelDouble}", Toast.LENGTH_SHORT).show()
-                    }
-                    
-                    // Debug: log tile provider info
-                    android.util.Log.d("MapScreen", "TileProvider: ${mapView.tileProvider}")
-                    android.util.Log.d("MapScreen", "TileSource: ${mapView.tileProvider.tileSource}")
-                    android.util.Log.d("MapScreen", "MapSize: ${mapView.width}x${mapView.height}")
-                    android.util.Log.d("MapScreen", "Center: ${mapView.mapCenter}")
                     
                     // Load saved position or default to Moscow
                     val savedLat = prefs.getFloat("lat", 55.7558f)
@@ -209,22 +212,23 @@ fun MapScreen(
                     }
                     mapView.overlays.add(userMarker)
                     
-                    // Enable pinch-to-zoom and hide zoom buttons
-                    mapView.setMultiTouchControls(true)
+                    // Disable osmdroid's built-in multi-touch controls (they add zoom buttons)
+                    mapView.setMultiTouchControls(false)
                     
-                    // Hide zoom buttons by finding them in the view hierarchy
-                    fun hideZoomButtons(view: android.view.View) {
-                        if (view is android.widget.ImageButton) {
-                            view.visibility = android.view.View.GONE
-                        } else if (view is android.view.ViewGroup) {
-                            for (i in 0 until view.childCount) {
-                                hideZoomButtons(view.getChildAt(i))
+                    // Implement custom pinch-to-zoom without zoom buttons
+                    val scaleDetector = android.view.ScaleGestureDetector(
+                        ctx,
+                        object : android.view.ScaleGestureDetector.SimpleOnScaleGestureListener() {
+                            override fun onScale(detector: android.view.ScaleGestureDetector): Boolean {
+                                val currentZoom = mapView.zoomLevelDouble
+                                val zoomDelta = (detector.scaleFactor - 1f) * 2
+                                val newZoom = currentZoom + zoomDelta
+                                val clampedZoom = newZoom.coerceIn(2.0, 20.0)
+                                mapView.controller.setZoom(clampedZoom)
+                                return true
                             }
                         }
-                    }
-                    hideZoomButtons(mapView)
-                    
-                    // Save position when map is moved or zoomed
+                    )
                     fun saveMapPosition(mv: MapView) {
                         prefs.edit().apply {
                             putFloat("lat", mv.mapCenter.latitude.toFloat())
@@ -236,11 +240,48 @@ fun MapScreen(
                     
                     // Add tap listener with null check
                     var lastSaveTime = 0L
+                    var lastTapTime = 0L
+                    
                     mapView.setOnTouchListener(object : View.OnTouchListener {
                         override fun onTouch(v: View?, event: MotionEvent?): Boolean {
                             if (event != null) {
+                                // Handle pinch-to-zoom
+                                scaleDetector.onTouchEvent(event)
+                                
+                                // Block double-tap to prevent zoom
+                                if (event.action == MotionEvent.ACTION_DOWN) {
+                                    val now = System.currentTimeMillis()
+                                    if (now - lastTapTime < 300L) {
+                                        lastTapTime = now
+                                        return true // Block double-tap
+                                    }
+                                    lastTapTime = now
+                                }
+                                
                                 when (event.action) {
                                     MotionEvent.ACTION_MOVE -> {
+                                        if (isDraggingMarker && draggingMarkerId != null) {
+                                            // Dragging a marker - only update visual position
+                                            val proj = mapView.projection
+                                            if (proj != null) {
+                                                val newGeoPoint = proj.fromPixels(event.x.toInt(), event.y.toInt())
+                                                if (newGeoPoint != null) {
+                                                    val currentMarkers = mapView.overlays.filterIsInstance<OsmdroidMarker>()
+                                                    for (marker in currentMarkers) {
+                                                        if (marker.title != null && marker.title != "Вы здесь") {
+                                                            val markerId = marker.title.toLongOrNull()
+                                                            if (markerId == draggingMarkerId) {
+                                                                val newPos = GeoPoint(newGeoPoint.latitude, newGeoPoint.longitude)
+                                                                marker.position = newPos
+                                                                mapView.invalidate()
+                                                                break
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                            return true // Consume event to prevent map panning
+                                        }
                                         // Debounce saves during movement
                                         val now = System.currentTimeMillis()
                                         if (now - lastSaveTime > 500) {
@@ -251,7 +292,28 @@ fun MapScreen(
                                     MotionEvent.ACTION_UP -> {
                                         saveMapPosition(mapView)
                                         
-                                        if (pendingMarkerType.value != null) {
+                                        if (isDraggingMarker && draggingMarkerId != null) {
+                                            // Save the final position
+                                            val proj = mapView.projection
+                                            if (proj != null) {
+                                                val tappedGeoPoint = proj.fromPixels(event.x.toInt(), event.y.toInt())
+                                                if (tappedGeoPoint != null) {
+                                                    val currentMarkers = mapView.overlays.filterIsInstance<OsmdroidMarker>()
+                                                    for (marker in currentMarkers) {
+                                                        if (marker.title != null && marker.title != "Вы здесь") {
+                                                            val markerId = marker.title.toLongOrNull()
+                                                            if (markerId == draggingMarkerId) {
+                                                                viewModel.moveMarker(markerId!!, tappedGeoPoint.latitude, tappedGeoPoint.longitude)
+                                                                break
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                            // Finish drag mode
+                                            isDraggingMarker = false
+                                            draggingMarkerId = null
+                                        } else if (pendingMarkerType.value != null) {
                                             // Placing a new marker
                                             val proj = mapView.projection
                                             if (proj != null) {
@@ -264,7 +326,6 @@ fun MapScreen(
                                                             pendingMarkerType.value!!
                                                         )
                                                         pendingMarkerType.value = null
-
                                                     } catch (e: Exception) {
                                                         Handler(Looper.getMainLooper()).post {
                                                             Toast.makeText(ctx, "Ошибка: ${e.message}", Toast.LENGTH_LONG).show()
@@ -273,6 +334,10 @@ fun MapScreen(
                                                     }
                                                 }
                                             }
+                                        } else if (showContextMenu) {
+                                            // Close context menu when tapping outside of it
+                                            showContextMenu = false
+                                            contextMenuOpenedMarkerId = null
                                         } else {
                                             // Check if tap is on an existing marker
                                             val proj = mapView.projection
@@ -294,7 +359,7 @@ fun MapScreen(
                                                             if (distances[0] < 100f) {
                                                                 selectedMarkerId = marker.title.toLongOrNull()
                                                                 showContextMenu = true
-                                                                contextMenuPosition = android.graphics.PointF(event.x, event.y)
+                                                                contextMenuOpenedMarkerId = marker.title.toLongOrNull()
                                                                 viewModel.refreshUiState()
                                                                 break
                                                             }
@@ -309,43 +374,6 @@ fun MapScreen(
                             return false
                         }
                     })
-                    
-                    // Load saved markers from SharedPreferences
-                    try {
-                        val markerPrefs = ctx.getSharedPreferences("markers_data", android.content.Context.MODE_PRIVATE)
-                        val markerCount = markerPrefs.getInt("marker_count", 0)
-                        
-                        for (i in 0 until markerCount) {
-                            val id = markerPrefs.getLong("marker_$i.id", -1)
-                            val lat = java.lang.Double.longBitsToDouble(markerPrefs.getLong("marker_$i.lat", java.lang.Double.doubleToLongBits(0.0)))
-                            val lon = java.lang.Double.longBitsToDouble(markerPrefs.getLong("marker_$i.lon", java.lang.Double.doubleToLongBits(0.0)))
-                            val type = markerPrefs.getString("marker_$i.type", "CHRISTMAS_TREE") ?: "CHRISTMAS_TREE"
-                            val quantity = markerPrefs.getInt("marker_$i.quantity", 1)
-                            
-                            val markerType = MarkerType.fromString(type)
-                            val latLng = GeoPoint(lat, lon)
-                            val bitmap = createMarkerBitmap(markerType.emoji)
-                            
-                            val markerIcon = BitmapDrawable(mapView.resources, bitmap)
-                            val osmdroidMarker = OsmdroidMarker(mapView).apply {
-                                position = latLng
-                                setIcon(markerIcon)
-                                setAnchor(OsmdroidMarker.ANCHOR_CENTER, OsmdroidMarker.ANCHOR_BOTTOM)
-                                title = id.toString()
-                                snippet = markerType.emoji
-                            }
-                            mapView.overlays.add(osmdroidMarker)
-                        }
-                        
-                        if (markerCount > 0) {
-                            mapView.invalidate()
-                            Handler(Looper.getMainLooper()).post {
-                                Toast.makeText(ctx, "Загружено $markerCount маркеров", Toast.LENGTH_SHORT).show()
-                            }
-                        }
-                    } catch (e: Exception) {
-                        e.printStackTrace()
-                    }
                     
                     // Mark map as ready
                     mapReady.value = true
@@ -369,13 +397,15 @@ fun MapScreen(
             }
         )
 
-        // FAB to go to user location
-        if (pendingMarkerType.value == null && showLocationButton) {
-            Column(
+        // Bottom action buttons - horizontal row
+        if (pendingMarkerType.value == null) {
+            Row(
                 modifier = Modifier
-                    .align(Alignment.BottomEnd)
-                    .padding(16.dp)
+                    .align(Alignment.BottomCenter)
+                    .padding(bottom = 80.dp, start = 16.dp, end = 16.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
+                // Location button
                 FloatingActionButton(
                     onClick = {
                         viewModel.requestLocationUpdate()
@@ -387,19 +417,31 @@ fun MapScreen(
                             }
                         }, 2000)
                     },
-                    modifier = Modifier.padding(bottom = 16.dp),
-                    containerColor = ComposeColor(0xFF1B5E20),
-                    contentColor = ComposeColor(0xFFFFD700)
+                    containerColor = MaterialTheme.colorScheme.primary,
+                    contentColor = MaterialTheme.colorScheme.secondary
                 ) {
-                    Icon(Icons.Default.LocationOn, contentDescription = "Go to my location", tint = ComposeColor(0xFFFFD700))
+                    Icon(Icons.Default.LocationOn, contentDescription = "Go to my location", tint = MaterialTheme.colorScheme.secondary)
                 }
-                
+
+                // Add marker button
                 FloatingActionButton(
                     onClick = { showPicker = true },
-                    containerColor = ComposeColor(0xFF1B5E20),
-                    contentColor = ComposeColor(0xFFFFD700)
+                    containerColor = MaterialTheme.colorScheme.primary,
+                    contentColor = MaterialTheme.colorScheme.secondary
                 ) {
-                    Icon(Icons.Default.Add, contentDescription = "Add marker", tint = ComposeColor(0xFFFFD700))
+                    Icon(Icons.Default.Add, contentDescription = "Add marker", tint = MaterialTheme.colorScheme.secondary)
+                }
+
+                // Owner search button
+                FloatingActionButton(
+                    onClick = {
+                        showOwnerSearchHint = !showOwnerSearchHint
+                        viewModel.toggleOwnerSearchHint()
+                    },
+                    containerColor = MaterialTheme.colorScheme.primary,
+                    contentColor = MaterialTheme.colorScheme.secondary
+                ) {
+                    Icon(Icons.Default.Search, contentDescription = "Search owner", tint = MaterialTheme.colorScheme.secondary)
                 }
             }
         } else {
@@ -444,8 +486,18 @@ fun MapScreen(
         }
 
         // Context menu for marker
+        LaunchedEffect(showContextMenu, selectedMarkerId) {
+            if (showContextMenu && selectedMarkerId != null) {
+                val marker = markers.find { it.id == selectedMarkerId }
+                if (marker != null) {
+                    contextMenuMarkerName = marker.name
+                    contextMenuMarkerQuantity = marker.quantity.toString()
+                }
+            }
+        }
+
         if (showContextMenu && selectedMarkerId != null) {
-            val selectedMarker = uiState.markers.find { it.id == selectedMarkerId }
+            val selectedMarker = markers.find { it.id == selectedMarkerId }
             if (selectedMarker != null) {
                 Box(
                     modifier = Modifier
@@ -460,80 +512,150 @@ fun MapScreen(
                     ) {
                         Card(
                             colors = CardDefaults.cardColors(
-                                containerColor = ComposeColor(0xFFFFF8E1)
+                                containerColor = MaterialTheme.colorScheme.surface
                             ),
                             elevation = CardDefaults.cardElevation(defaultElevation = 8.dp),
                             shape = RoundedCornerShape(16.dp)
                         ) {
                             Column(
                                 modifier = Modifier.padding(16.dp),
-                                horizontalAlignment = Alignment.CenterHorizontally
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
                                 Text(
                                     text = selectedMarker.markerType().emoji,
                                     fontSize = 32.sp
                                 )
-                                Spacer(modifier = Modifier.height(8.dp))
+
+                                // Editable name field
                                 Text(
-                                    text = selectedMarker.markerType().label,
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 16.sp,
-                                    color = MaterialTheme.colorScheme.onSurface
+                                    text = "Имя", fontWeight = FontWeight.Medium,
+                                    fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
-                                Spacer(modifier = Modifier.height(4.dp))
+                                BasicTextField(
+                                    value = contextMenuMarkerName,
+                                    onValueChange = { contextMenuMarkerName = it },
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .background(
+                                            MaterialTheme.colorScheme.surfaceVariant,
+                                            RoundedCornerShape(8.dp)
+                                        )
+                                        .padding(8.dp),
+                                    textStyle = androidx.compose.ui.text.TextStyle(
+                                        textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                                        fontSize = 14.sp,
+                                        color = MaterialTheme.colorScheme.onSurface
+                                    ),
+                                    decorationBox = { innerTextField ->
+                                        if (contextMenuMarkerName.isEmpty()) {
+                                            Text(
+                                                text = selectedMarker.markerType().label,
+                                                fontSize = 14.sp,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                        }
+                                        innerTextField()
+                                    }
+                                )
+
+                                // Editable quantity field
                                 Text(
-                                    text = "Количество: ${selectedMarker.quantity}",
-                                    fontSize = 14.sp,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    text = "Количество", fontWeight = FontWeight.Medium,
+                                    fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
-                                Spacer(modifier = Modifier.height(12.dp))
-                                
-                                // +1 button
                                 Row(
                                     modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                    horizontalArrangement = Arrangement.Center,
+                                    verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    Button(
+                                    IconButton(
                                         onClick = {
-                                            viewModel.incrementQuantity(selectedMarker.id)
-                                            showContextMenu = false
-                                            refreshMapMarkers()
+                                            val current = contextMenuMarkerQuantity.toIntOrNull() ?: 1
+                                            if (current > 1) {
+                                                contextMenuMarkerQuantity = (current - 1).toString()
+                                            }
                                         },
-                                        modifier = Modifier.weight(1f),
-                                        colors = ButtonDefaults.buttonColors(
-                                            containerColor = ComposeColor(0xFF1B5E20)
-                                        )
+                                        modifier = Modifier.size(36.dp)
                                     ) {
-                                        Text("+1", color = ComposeColor(0xFFFFD700))
+                                        Text("−", fontSize = 20.sp, fontWeight = FontWeight.Bold)
                                     }
-                                    
-                                    Button(
-                                        onClick = {
-                                            viewModel.decrementQuantity(selectedMarker.id)
-                                            showContextMenu = false
-                                            refreshMapMarkers()
+
+                                    BasicTextField(
+                                        value = contextMenuMarkerQuantity,
+                                        onValueChange = { newValue ->
+                                            if (newValue.isEmpty() || newValue.all { it.isDigit() }) {
+                                                contextMenuMarkerQuantity = newValue
+                                            }
                                         },
-                                        modifier = Modifier.weight(1f),
-                                        enabled = selectedMarker.quantity > 1,
-                                        colors = ButtonDefaults.buttonColors(
-                                            containerColor = ComposeColor(0xFF1B5E20)
-                                        )
+                                        modifier = Modifier
+                                            .width(50.dp)
+                                            .background(
+                                                MaterialTheme.colorScheme.surfaceVariant,
+                                                RoundedCornerShape(8.dp)
+                                            )
+                                            .padding(6.dp),
+                                        textStyle = androidx.compose.ui.text.TextStyle(
+                                            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                                            fontSize = 16.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = MaterialTheme.colorScheme.onSurface
+                                        ),
+                                        keyboardOptions = KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Number)
+                                    )
+
+                                    IconButton(
+                                        onClick = {
+                                            val current = contextMenuMarkerQuantity.toIntOrNull() ?: 1
+                                            contextMenuMarkerQuantity = (current + 1).toString()
+                                        },
+                                        modifier = Modifier.size(36.dp)
                                     ) {
-                                        Text("-1", color = ComposeColor(0xFFFFD700))
+                                        Text("+", fontSize = 20.sp, fontWeight = FontWeight.Bold)
                                     }
                                 }
-                                
-                                Spacer(modifier = Modifier.height(8.dp))
-                                
+
+                                // Save button
+                                Button(
+                                    onClick = {
+                                        viewModel.updateMarkerName(selectedMarker.id, contextMenuMarkerName)
+                                        val newQuantity = contextMenuMarkerQuantity.toIntOrNull()
+                                        if (newQuantity != null && newQuantity >= 1) {
+                                            viewModel.setMarkerQuantity(selectedMarker.id, newQuantity)
+                                        }
+                                        showContextMenu = false
+                                    },
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Text("Сохранить")
+                                }
+
+                                // Drag button
+                                Button(
+                                    onClick = {
+                                        val selected = markers.find { it.id == selectedMarker.id }
+                                        isDraggingMarker = true
+                                        draggingMarkerId = selectedMarker.id
+                                        dragStartPos = selected?.let { GeoPoint(it.latitude, it.longitude) }
+                                        showContextMenu = false
+                                    },
+                                    colors = ButtonDefaults.buttonColors(
+                                        containerColor = MaterialTheme.colorScheme.secondary
+                                    )
+                                ) {
+                                    Icon(Icons.Default.LocationOn, contentDescription = null, modifier = Modifier.size(16.dp))
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text("Переместить", color = MaterialTheme.colorScheme.onSecondary)
+                                }
+
                                 // Delete button
                                 OutlinedButton(
                                     onClick = {
                                         viewModel.deleteMarker(selectedMarker)
                                         showContextMenu = false
-                                        refreshMapMarkers()
                                     },
                                     colors = ButtonDefaults.outlinedButtonColors(
-                                        contentColor = ComposeColor(0xFFC62828)
+                                        contentColor = MaterialTheme.colorScheme.tertiary
                                     )
                                 ) {
                                     Icon(Icons.Default.Delete, contentDescription = null, modifier = Modifier.size(16.dp))
@@ -541,6 +663,74 @@ fun MapScreen(
                                     Text("Удалить")
                                 }
                             }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Drag mode hint
+        if (isDraggingMarker) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(top = 56.dp, start = 8.dp, end = 8.dp)
+            ) {
+                Surface(
+                    modifier = Modifier
+                        .fillMaxWidth(),
+                    tonalElevation = 8.dp,
+                    color = MaterialTheme.colorScheme.secondary
+                ) {
+                    Row(
+                        modifier = Modifier.padding(12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                Icons.Default.LocationOn,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onSecondary,
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = "Перемещение маркера. Нажмите на карту, чтобы установить новую позицию.",
+                                color = MaterialTheme.colorScheme.onSecondary,
+                                fontSize = 14.sp
+                            )
+                        }
+                        TextButton(
+                            onClick = {
+                                // Cancel drag - restore original position
+                                val mapView = mapViewRef.value
+                                if (mapView != null && dragStartPos != null && draggingMarkerId != null) {
+                                    val currentMarkers = mapView.overlays.filterIsInstance<OsmdroidMarker>()
+                                    for (marker in currentMarkers) {
+                                        if (marker.title != null && marker.title != "Вы здесь") {
+                                            val markerId = marker.title.toLongOrNull()
+                                            if (markerId == draggingMarkerId) {
+                                                marker.position = dragStartPos
+                                                viewModel.moveMarker(draggingMarkerId!!, dragStartPos!!.latitude, dragStartPos!!.longitude)
+                                                mapView.invalidate()
+                                                break
+                                            }
+                                        }
+                                    }
+                                }
+                                isDraggingMarker = false
+                                draggingMarkerId = null
+                                dragStartPos = null
+                            }
+                        ) {
+                            Text(
+                                text = "Отмена",
+                                color = MaterialTheme.colorScheme.onSecondary,
+                                fontWeight = FontWeight.Bold
+                            )
                         }
                     }
                 }
@@ -566,6 +756,11 @@ fun MapScreen(
             ) {
                 CircularProgressIndicator()
             }
+        }
+        
+        // Snowfall overlay
+        if (uiState.isSnowEnabled) {
+            SnowfallOverlay(modifier = Modifier.fillMaxSize())
         }
         
         // Marker counters at the top (drawn last = on top)
@@ -600,7 +795,6 @@ fun MapScreen(
 
 
 private fun createLocationBitmap(zoomLevel: Double): Bitmap {
-    // Fixed size marker - always same size on screen
     val size = 64
     val bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
     val canvas = Canvas(bitmap)
@@ -608,9 +802,8 @@ private fun createLocationBitmap(zoomLevel: Double): Bitmap {
     val cx = size / 2f
     val cy = size / 2f
     
-    // Draw stick figure (person) - orange color, no background circle
     val personPaint = Paint().apply {
-        color = Color.parseColor("#FF6B35")
+        color = android.graphics.Color.parseColor("#FF6B35")
         strokeWidth = 6f
         isAntiAlias = true
         style = Paint.Style.STROKE
@@ -619,17 +812,10 @@ private fun createLocationBitmap(zoomLevel: Double): Bitmap {
     val headRadius = 8f
     val headY = cy - 14f
     
-    // Head circle
     personPaint.style = Paint.Style.STROKE
     canvas.drawCircle(cx, headY, headRadius, personPaint)
-    
-    // Body
     canvas.drawLine(cx, headY + headRadius, cx, cy + 16f, personPaint)
-    
-    // Arms
     canvas.drawLine(cx - 14f, cy - 4f, cx + 14f, cy - 4f, personPaint)
-    
-    // Legs
     canvas.drawLine(cx, cy + 16f, cx - 14f, cy + 30f, personPaint)
     canvas.drawLine(cx, cy + 16f, cx + 14f, cy + 30f, personPaint)
     
@@ -646,7 +832,7 @@ private fun CounterCard(
     Card(
         modifier = modifier.width(60.dp).height(60.dp),
         colors = CardDefaults.cardColors(
-            containerColor = ComposeColor(0xFF1B5E20)
+            containerColor = MaterialTheme.colorScheme.primary
         ),
         elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
         shape = RoundedCornerShape(12.dp)
@@ -667,11 +853,68 @@ private fun CounterCard(
                     text = count.toString(),
                     fontSize = 16.sp,
                     fontWeight = FontWeight.Bold,
-                    color = ComposeColor(0xFFFFD700)
+                    color = MaterialTheme.colorScheme.secondary
                 )
             }
         }
     }
+}
+
+private fun createMarkerBitmapWithQuantity(emoji: String, quantity: Int): Bitmap {
+    val size = 100
+    val bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
+    val canvas = Canvas(bitmap)
+    
+    // Draw white circle background
+    val paint = Paint().apply {
+        color = Color.WHITE
+        isAntiAlias = true
+    }
+    canvas.drawCircle(size / 2f, size / 2f, size / 2f, paint)
+    
+    // Draw border
+    val borderPaint = Paint().apply {
+        color = Color.GRAY
+        strokeWidth = 4f
+        isAntiAlias = true
+        style = Paint.Style.STROKE
+    }
+    canvas.drawCircle(size / 2f, size / 2f, size / 2f - 2f, borderPaint)
+    
+    // Draw emoji
+    val textPaint = Paint().apply {
+        color = Color.BLACK
+        textSize = size * 0.45f
+        isAntiAlias = true
+        textAlign = Paint.Align.CENTER
+    }
+    canvas.drawText(emoji, size / 2f, size * 0.6f, textPaint)
+    
+    // Draw quantity badge (larger red circle with white number) at top-right
+    if (quantity > 1) {
+        val badgeRadius = 28f
+        val badgeX = size - 22f
+        val badgeY = 22f
+        
+        val badgePaint = Paint().apply {
+            color = Color.parseColor("#C62828") // Red
+            isAntiAlias = true
+        }
+        canvas.drawCircle(badgeX, badgeY, badgeRadius, badgePaint)
+        
+        val badgeTextPaint = Paint().apply {
+            color = Color.WHITE
+            textSize = 28f
+            isAntiAlias = true
+            textAlign = Paint.Align.CENTER
+            // Vertical centering
+            val textBounds = Rect()
+            textPaint.getTextBounds(quantity.toString(), 0, quantity.toString().length, textBounds)
+        }
+        canvas.drawText(quantity.toString(), badgeX, badgeY + 10f, badgeTextPaint)
+    }
+    
+    return bitmap
 }
 
 private fun createMarkerBitmap(emoji: String): Bitmap {

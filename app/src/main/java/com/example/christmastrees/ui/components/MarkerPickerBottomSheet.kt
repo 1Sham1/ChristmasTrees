@@ -1,5 +1,6 @@
 package com.example.christmastrees.ui.components
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.grid.GridCells
@@ -9,7 +10,6 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -24,9 +24,21 @@ fun MarkerPickerBottomSheet(
 ) {
     ModalBottomSheet(
         onDismissRequest = onDismiss,
-        containerColor = Color(0xFF2E7D32),
+        containerColor = MaterialTheme.colorScheme.primary,
         tonalElevation = 8.dp,
-        modifier = modifier
+        modifier = modifier,
+        dragHandle = {
+            // Custom festive drag handle
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(4.dp)
+                    .background(
+                        MaterialTheme.colorScheme.secondary,
+                        shape = MaterialTheme.shapes.small
+                    )
+            )
+        }
     ) {
         Column(
             modifier = Modifier
@@ -37,7 +49,7 @@ fun MarkerPickerBottomSheet(
                 text = "✨ Выберите тип объекта",
                 fontSize = 20.sp,
                 fontWeight = FontWeight.Bold,
-                color = Color(0xFF1B5E20),
+                color = MaterialTheme.colorScheme.onPrimary,
                 modifier = Modifier.fillMaxWidth(),
                 textAlign = androidx.compose.ui.text.style.TextAlign.Center
             )
@@ -74,7 +86,7 @@ private fun MarkerTypeButton(
             .aspectRatio(1f)
             .clickable(onClick = onClick),
         colors = CardDefaults.cardColors(
-            containerColor = Color(0xFFFFF8E1)
+            containerColor = MaterialTheme.colorScheme.surface
         ),
         elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
         shape = MaterialTheme.shapes.medium
@@ -92,7 +104,7 @@ private fun MarkerTypeButton(
             Text(
                 text = type.label,
                 fontSize = 11.sp,
-                color = Color(0xFF1B5E20),
+                color = MaterialTheme.colorScheme.onSurface,
                 fontWeight = FontWeight.Medium
             )
         }

@@ -11,18 +11,38 @@ import androidx.annotation.RequiresPermission
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
+import androidx.compose.runtime.compositionLocalOf
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import com.example.christmastrees.data.MarkerType
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
 
 data class UiState(
     val markers: List<Marker> = emptyList(),
+    val treesCount: Int = 0,
+    val snowmenCount: Int = 0,
+    val decorationsCount: Int = 0,
     val currentLocation: Location? = null,
     val isLocationPermissionGranted: Boolean = false,
     val isLoadingLocation: Boolean = false,
-    val placeMarkerMode: PlaceMarkerMode = PlaceMarkerMode.Idle
+    val placeMarkerMode: PlaceMarkerMode = PlaceMarkerMode.Idle,
+    val isSnowEnabled: Boolean = true,
+    val showOwnerSearchHint: Boolean = false
 )
+
+private fun computeCounts(m: List<Marker>): IntArray {
+    var t = 0
+    var s = 0
+    var d = 0
+    for (marker in m) {
+        when (marker.markerType()) {
+            MarkerType.CHRISTMAS_TREE -> t += marker.quantity
+            MarkerType.SNOWMAN -> s += marker.quantity
+            MarkerType.CITY_DECORATION -> d += marker.quantity
+        }
+    }
+    return intArrayOf(t, s, d)
+}
 
 sealed interface PlaceMarkerMode {
     object Idle : PlaceMarkerMode
@@ -34,6 +54,7 @@ data class Marker(
     val latitude: Double,
     val longitude: Double,
     val type: String,
+    val name: String,
     val timestamp: Long,
     val quantity: Int = 1
 ) {
@@ -44,9 +65,11 @@ class MarkersViewModel(
     private val context: Context
 ) : ViewModel() {
 
-    private val _markers = MutableStateFlow<List<Marker>>(emptyList())
-    private val _uiState = MutableStateFlow(UiState())
-    val uiState: StateFlow<UiState> = _uiState.asStateFlow()
+    var markers by mutableStateOf<List<Marker>>(emptyList())
+        private set
+    
+    var uiState by mutableStateOf(UiState())
+        private set
     
     private var nextId = 1L
     var onMarkerAdded: ((Marker) -> Unit)? = null
@@ -56,8 +79,7 @@ class MarkersViewModel(
         try {
             checkLocationPermission()
             loadMarkersFromStorage()
-            // Sync markers to uiState after loading
-            _uiState.value = _uiState.value.copy(markers = _markers.value)
+            syncUiState()
         } catch (e: Exception) {
             e.printStackTrace()
         }
@@ -71,38 +93,58 @@ class MarkersViewModel(
             val markerCount = prefs.getInt("marker_count", 0)
             android.util.Log.d("MarkersViewModel", "loadMarkersFromStorage: markerCount=$markerCount")
             
-            val markers = mutableListOf<Marker>()
+            val markerList = mutableListOf<Marker>()
             
             for (i in 0 until markerCount) {
                 val id = prefs.getLong("marker_$i.id", -1)
                 val lat = java.lang.Double.longBitsToDouble(prefs.getLong("marker_$i.lat", java.lang.Double.doubleToLongBits(0.0)))
                 val lon = java.lang.Double.longBitsToDouble(prefs.getLong("marker_$i.lon", java.lang.Double.doubleToLongBits(0.0)))
                 val type = prefs.getString("marker_$i.type", null) ?: "CHRISTMAS_TREE"
+                val name = prefs.getString("marker_$i.name", null) ?: MarkerType.fromString(type).label
                 val timestamp = prefs.getLong("marker_$i.timestamp", 0L)
                 val quantity = prefs.getInt("marker_$i.quantity", 1)
                 
-                markers.add(Marker(id, lat, lon, type, timestamp, quantity))
+                markerList.add(Marker(id, lat, lon, type, "", timestamp, quantity))
             }
             
-            if (markers.isNotEmpty()) {
-                _markers.value = markers
+            if (markerList.isNotEmpty()) {
+                markers = markerList
                 
                 // Set nextId to be larger than any existing marker id
-                val maxId = markers.maxOfOrNull { it.id } ?: 0
+                val maxId = markerList.maxOfOrNull { it.id } ?: 0
                 nextId = maxId + 1
                 
-                android.util.Log.d("MarkersViewModel", "Loaded ${markers.size} markers from storage")
+                android.util.Log.d("MarkersViewModel", "Loaded ${markerList.size} markers from storage")
                 
                 // Notify UI
-                onMarkersLoaded?.invoke(markers.size)
+                onMarkersLoaded?.invoke(markerList.size)
             }
         } catch (e: Exception) {
             android.util.Log.e("MarkersViewModel", "Failed to load markers", e)
         }
     }
     
+    private fun syncUiState() {
+        val counts = computeCounts(markers)
+        uiState = uiState.copy(
+            markers = markers,
+            treesCount = counts[0],
+            snowmenCount = counts[1],
+            decorationsCount = counts[2]
+        )
+        android.util.Log.d("MarkersViewModel", "syncUiState: trees=${counts[0]} snowmen=${counts[1]} decorations=${counts[2]}")
+    }
+    
     fun refreshUiState() {
-        _uiState.value = _uiState.value.copy(markers = _markers.value)
+        syncUiState()
+    }
+
+    fun toggleSnow() {
+        uiState = uiState.copy(isSnowEnabled = !uiState.isSnowEnabled)
+    }
+
+    fun toggleOwnerSearchHint() {
+        uiState = uiState.copy(showOwnerSearchHint = !uiState.showOwnerSearchHint)
     }
 
     private fun saveMarkers() {
@@ -111,19 +153,20 @@ class MarkersViewModel(
             val prefs = appCtx.getSharedPreferences("markers_data", android.content.Context.MODE_PRIVATE)
             
             val editor = prefs.edit()
-            editor.putInt("marker_count", _markers.value.size)
+            editor.putInt("marker_count", markers.size)
             
-            _markers.value.forEachIndexed { index, marker ->
+            markers.forEachIndexed { index, marker ->
                 editor.putLong("marker_$index.id", marker.id)
                 editor.putLong("marker_$index.lat", java.lang.Double.doubleToLongBits(marker.latitude))
                 editor.putLong("marker_$index.lon", java.lang.Double.doubleToLongBits(marker.longitude))
                 editor.putString("marker_$index.type", marker.type)
+                editor.putString("marker_$index.name", marker.name)
                 editor.putLong("marker_$index.timestamp", marker.timestamp)
                 editor.putInt("marker_$index.quantity", marker.quantity)
             }
             editor.apply()
             
-            android.util.Log.d("MarkersViewModel", "Saved ${_markers.value.size} markers to storage")
+            android.util.Log.d("MarkersViewModel", "Saved ${markers.size} markers to storage")
         } catch (e: Exception) {
             android.util.Log.e("MarkersViewModel", "Failed to save markers", e)
         }
@@ -136,15 +179,14 @@ class MarkersViewModel(
             latitude = latitude,
             longitude = longitude,
             type = type.name,
+            name = type.label,
             timestamp = System.currentTimeMillis(),
             quantity = 1
         )
-        _markers.value = _markers.value + newMarker
-        android.util.Log.d("MarkersViewModel", "Markers count now: ${_markers.value.size}")
-        _uiState.value = _uiState.value.copy(
-            placeMarkerMode = PlaceMarkerMode.Idle,
-            markers = _markers.value
-        )
+        markers = markers + newMarker
+        android.util.Log.d("MarkersViewModel", "Markers count now: ${markers.size}")
+        uiState = uiState.copy(placeMarkerMode = PlaceMarkerMode.Idle)
+        syncUiState()
         
         // Save markers to storage
         saveMarkers()
@@ -154,41 +196,71 @@ class MarkersViewModel(
     }
 
     fun deleteMarker(marker: Marker) {
-        _markers.value = _markers.value.filter { it.id != marker.id }
-        _uiState.value = _uiState.value.copy(markers = _markers.value)
+        markers = markers.filter { it.id != marker.id }
+        syncUiState()
+        saveMarkers()
+    }
+
+    fun setMarkerQuantity(markerId: Long, newQuantity: Int) {
+        val newList = markers.toMutableList()
+        val idx = newList.indexOfFirst { it.id == markerId }
+        if (idx != -1 && newQuantity >= 1) {
+            newList[idx] = newList[idx].copy(quantity = newQuantity)
+        }
+        markers = newList
+        syncUiState()
         saveMarkers()
     }
 
     fun incrementQuantity(markerId: Long) {
-        _markers.value = _markers.value.map { marker ->
-            if (marker.id == markerId) {
-                marker.copy(quantity = marker.quantity + 1)
-            } else {
-                marker
-            }
+        val newList = markers.toMutableList()
+        val idx = newList.indexOfFirst { it.id == markerId }
+        if (idx != -1) {
+            newList[idx] = newList[idx].copy(quantity = newList[idx].quantity + 1)
         }
-        _uiState.value = _uiState.value.copy(markers = _markers.value)
+        markers = newList
+        syncUiState()
+        saveMarkers()
+    }
+
+    fun updateMarkerName(markerId: Long, newName: String) {
+        val newList = markers.toMutableList()
+        val idx = newList.indexOfFirst { it.id == markerId }
+        if (idx != -1) {
+            newList[idx] = newList[idx].copy(name = newName)
+        }
+        markers = newList
         saveMarkers()
     }
 
     fun decrementQuantity(markerId: Long) {
-        _markers.value = _markers.value.map { marker ->
-            if (marker.id == markerId && marker.quantity > 1) {
-                marker.copy(quantity = marker.quantity - 1)
-            } else {
-                marker
-            }
+        val newList = markers.toMutableList()
+        val idx = newList.indexOfFirst { it.id == markerId }
+        if (idx != -1 && newList[idx].quantity > 1) {
+            newList[idx] = newList[idx].copy(quantity = newList[idx].quantity - 1)
         }
-        _uiState.value = _uiState.value.copy(markers = _markers.value)
+        markers = newList
+        syncUiState()
+        saveMarkers()
+    }
+
+    fun moveMarker(markerId: Long, newLatitude: Double, newLongitude: Double) {
+        val newList = markers.toMutableList()
+        val idx = newList.indexOfFirst { it.id == markerId }
+        if (idx != -1) {
+            newList[idx] = newList[idx].copy(latitude = newLatitude, longitude = newLongitude)
+        }
+        markers = newList
+        syncUiState()
         saveMarkers()
     }
 
     fun cancelPlaceMarker() {
-        _uiState.value = _uiState.value.copy(placeMarkerMode = PlaceMarkerMode.Idle)
+        uiState = uiState.copy(placeMarkerMode = PlaceMarkerMode.Idle)
     }
 
     fun startPlaceMarker(type: MarkerType) {
-        _uiState.value = _uiState.value.copy(
+        uiState = uiState.copy(
             placeMarkerMode = PlaceMarkerMode.Selecting(type)
         )
     }
@@ -202,7 +274,7 @@ class MarkersViewModel(
             val coarseGranted = ContextCompat.checkSelfPermission(
                 appCtx, Manifest.permission.ACCESS_COARSE_LOCATION
             ) == PackageManager.PERMISSION_GRANTED
-            _uiState.value = _uiState.value.copy(
+            uiState = uiState.copy(
                 isLocationPermissionGranted = fineGranted || coarseGranted
             )
         } catch (e: Exception) {
@@ -212,7 +284,7 @@ class MarkersViewModel(
 
     @RequiresPermission(allOf = [Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION])
     fun onPermissionResult(granted: Boolean) {
-        _uiState.value = _uiState.value.copy(isLocationPermissionGranted = granted)
+        uiState = uiState.copy(isLocationPermissionGranted = granted)
         if (granted) {
             loadCurrentLocation()
         }
@@ -220,8 +292,8 @@ class MarkersViewModel(
 
     @RequiresPermission(allOf = [Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION])
     fun loadCurrentLocation() {
-        if (_uiState.value.isLocationPermissionGranted) {
-            _uiState.value = _uiState.value.copy(isLoadingLocation = true)
+        if (uiState.isLocationPermissionGranted) {
+            uiState = uiState.copy(isLoadingLocation = true)
             
             try {
                 val appCtx = context.applicationContext
@@ -247,29 +319,29 @@ class MarkersViewModel(
                 }
                 
                 if (networkLocation != null) {
-                    _uiState.value = _uiState.value.copy(
+                    uiState = uiState.copy(
                         currentLocation = networkLocation,
                         isLoadingLocation = false
                     )
                 } else {
-                    _uiState.value = _uiState.value.copy(isLoadingLocation = false)
+                    uiState = uiState.copy(isLoadingLocation = false)
                 }
             } catch (e: Exception) {
-                _uiState.value = _uiState.value.copy(isLoadingLocation = false)
+                uiState = uiState.copy(isLoadingLocation = false)
             }
         }
     }
 
     @RequiresPermission(allOf = [Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION])
     fun requestLocationUpdate() {
-        if (_uiState.value.isLocationPermissionGranted) {
+        if (uiState.isLocationPermissionGranted) {
             try {
                 val appCtx = context.applicationContext
                 val locationManager = appCtx.getSystemService(Context.LOCATION_SERVICE) as LocationManager
                 
                 val locationListener = object : LocationListener {
                     override fun onLocationChanged(location: Location) {
-                        _uiState.value = _uiState.value.copy(currentLocation = location, isLoadingLocation = false)
+                        uiState = uiState.copy(currentLocation = location, isLoadingLocation = false)
                     }
                     override fun onProviderDisabled(provider: String) {}
                     override fun onProviderEnabled(provider: String) {}
@@ -285,17 +357,19 @@ class MarkersViewModel(
                     ?: locationManager.getLastKnownLocation(LocationManager.GPS_PROVIDER)
                 
                 if (location != null) {
-                    _uiState.value = _uiState.value.copy(currentLocation = location, isLoadingLocation = false)
+                    uiState = uiState.copy(currentLocation = location, isLoadingLocation = false)
                 } else {
-                    _uiState.value = _uiState.value.copy(isLoadingLocation = true)
+                    uiState = uiState.copy(isLoadingLocation = true)
                 }
             } catch (e: Exception) {
-                _uiState.value = _uiState.value.copy(isLoadingLocation = false)
+                uiState = uiState.copy(isLoadingLocation = false)
             }
         }
     }
 
     companion object {
+        val LocalMarkersViewModel = compositionLocalOf<MarkersViewModel?> { null }
+
         fun Factory(context: android.content.Context): androidx.lifecycle.ViewModelProvider.Factory =
             object : ViewModelProvider.Factory {
                 @Suppress("UNCHECKED_CAST")

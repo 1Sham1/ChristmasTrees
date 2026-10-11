@@ -1,5 +1,6 @@
 package com.example.christmastrees.ui.screens
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -9,47 +10,51 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.christmastrees.data.Category
+import com.example.christmastrees.ui.components.SnowfallOverlay
 import com.example.christmastrees.viewmodel.MarkersViewModel
 import com.example.christmastrees.viewmodel.Marker
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ListScreen(
-    viewModel: MarkersViewModel = viewModel()
+    viewModel: MarkersViewModel = MarkersViewModel.LocalMarkersViewModel.current ?: throw IllegalStateException("MarkersViewModel not provided")
 ) {
-    val uiState by viewModel.uiState.collectAsState()
+    val markers = viewModel.markers
 
     // Group markers by category
-    val groupedMarkers by remember(uiState.markers) {
-        val grouped = uiState.markers.groupBy { marker ->
-            try {
-                marker.markerType().category
-            } catch (e: Exception) {
-                Category.TREES
-            }
+    val groupedMarkers = markers.groupBy { marker ->
+        try {
+            marker.markerType().category
+        } catch (e: Exception) {
+            Category.TREES
         }
-        mutableStateOf(grouped)
     }
 
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("🎄 Размещённые объекты") },
+                title = { 
+                    Text(
+                        "🎄 Размещённые объекты",
+                        fontWeight = FontWeight.Bold
+                    ) 
+                },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surface,
-                    titleContentColor = MaterialTheme.colorScheme.onSurface
+                    containerColor = MaterialTheme.colorScheme.primary,
+                    titleContentColor = MaterialTheme.colorScheme.onPrimary
                 )
             )
         },
         containerColor = MaterialTheme.colorScheme.background
     ) { paddingValues ->
-        if (uiState.markers.isEmpty()) {
+        // Snowfall overlay
+        SnowfallOverlay(modifier = Modifier.fillMaxSize())
+        
+        if (markers.isEmpty()) {
             Box(
                 modifier = Modifier
                     .fillMaxSize()
@@ -112,7 +117,8 @@ private fun CategoryHeader(category: Category) {
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.primary
         ),
-        shape = MaterialTheme.shapes.medium
+        shape = MaterialTheme.shapes.medium,
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
         Text(
             text = "✨ $category",
@@ -142,7 +148,8 @@ private fun MarkerListItem(
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surface
         ),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+        shape = MaterialTheme.shapes.medium
     ) {
         Row(
             modifier = Modifier
@@ -188,3 +195,5 @@ private fun MarkerListItem(
         }
     }
 }
+
+

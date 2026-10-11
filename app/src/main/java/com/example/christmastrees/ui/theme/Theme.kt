@@ -1,6 +1,5 @@
 package com.example.christmastrees.ui.theme
 
-import android.app.Activity
 import android.os.Build
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
@@ -14,34 +13,67 @@ import androidx.compose.ui.platform.LocalContext
 
 private val DarkColorScheme = darkColorScheme(
     primary = ChristmasGreen,
+    onPrimary = Color.White,
+    primaryContainer = ChristmasGreenLight,
+    onPrimaryContainer = ChristmasCream,
+    
     secondary = ChristmasGold,
-    tertiary = ChristmasRed,
-    background = ChristmasDark,
-    surface = ChristmasGreen,
-    onPrimary = ChristmasGold,
     onSecondary = ChristmasDark,
+    secondaryContainer = ChristmasGoldLight,
+    onSecondaryContainer = ChristmasDark,
+    
+    tertiary = ChristmasRed,
     onTertiary = Color.White,
+    tertiaryContainer = ChristmasRedLight,
+    onTertiaryContainer = Color.White,
+    
+    background = ForestDark,
     onBackground = ChristmasCream,
-    onSurface = ChristmasCream
+    
+    surface = ChristmasGreenDark,
+    onSurface = ChristmasCream,
+    surfaceVariant = ChristmasSurfaceDark,
+    onSurfaceVariant = ChristmasCream,
+    
+    surfaceTint = ChristmasGreen,
+    inverseSurface = ChristmasGreen,
+    inverseOnSurface = ChristmasCream,
+    error = ChristmasRed
 )
 
 private val LightColorScheme = lightColorScheme(
     primary = ChristmasGreen,
-    secondary = ChristmasGold,
-    tertiary = ChristmasRed,
-    background = ChristmasCream,
-    surface = ChristmasGreenLight,
     onPrimary = Color.White,
+    primaryContainer = ChristmasGreenLight,
+    onPrimaryContainer = Color.White,
+    
+    secondary = ChristmasGold,
     onSecondary = ChristmasDark,
+    secondaryContainer = ChristmasGoldLight,
+    onSecondaryContainer = ChristmasDark,
+    
+    tertiary = ChristmasRed,
     onTertiary = Color.White,
+    tertiaryContainer = ChristmasRedLight,
+    onTertiaryContainer = Color.White,
+    
+    background = ChristmasCream,
     onBackground = ChristmasDark,
-    onSurface = Color.White
+    
+    surface = ChristmasSurface,
+    onSurface = ChristmasDark,
+    surfaceVariant = ChristmasCream,
+    onSurfaceVariant = ChristmasDark,
+    
+    surfaceTint = ChristmasGreen,
+    inverseSurface = ChristmasGreenDark,
+    inverseOnSurface = ChristmasCream,
+    error = ChristmasRed
 )
 
 @Composable
 fun ChristmasTreesTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
-    // Dynamic color is available on Android 12+
     dynamicColor: Boolean = false,
     content: @Composable () -> Unit
 ) {
@@ -50,7 +82,6 @@ fun ChristmasTreesTheme(
             val context = LocalContext.current
             if (darkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
         }
-
         darkTheme -> DarkColorScheme
         else -> LightColorScheme
     }
