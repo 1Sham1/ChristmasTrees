@@ -1,0 +1,343 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="GigaCodeAgentSettings">
+    <option name="autoApprovedCommands">
+      <list>
+        <Execute>
+          <option name="pattern" value="cd *" />
+        </Execute>
+        <Execute>
+          <option name="pattern" value=".\gradlew.bat assembleDebug --no-daemon 2&gt;&amp;1" />
+        </Execute>
+        <Execute>
+          <option name="pattern" value="echo *" />
+        </Execute>
+        <Execute>
+          <option name="pattern" value="Get-ChildItem &quot;C:\Program Files\Java&quot; -ErrorAction SilentlyContinue" />
+        </Execute>
+        <Execute>
+          <option name="pattern" value="Get-ChildItem &quot;C:\Program Files\Android&quot; -ErrorAction SilentlyContinue -Recurse -Filter &quot;javac.exe&quot; -ErrorAction SilentlyContinue" />
+        </Execute>
+        <Execute>
+          <option name="pattern" value="Invoke-WebRequest -Uri &quot;https://download.eclipse.org/openjdk/jdk17.0.9+9/bin/openjdk-17.0.9_9-windows-x64-bin.zip&quot; -OutFile &quot;$env:TEMP\jdk.zip&quot; -UseBasicParsing 2&gt;&amp;1" />
+        </Execute>
+        <Execute>
+          <option name="pattern" value="Invoke-WebRequest -Uri &quot;https://github.com/adoptium/temurin17-binaries/releases/download/jdk-17.0.12%2B7/OpenJDK17-jdk_x64_windows_hotspot_17.0.12_7.zip&quot; -OutFile &quot;$env:TEMP\jdk.zip&quot; -UseBasicParsing 2&gt;&amp;1" />
+        </Execute>
+        <Execute>
+          <option name="pattern" value="winget search *" />
+        </Execute>
+        <Execute>
+          <option name="pattern" value="Get-ChildItem &quot;C:\Program Files\Android&quot; -Recurse -Filter &quot;javac.exe&quot; -ErrorAction SilentlyContinue 2&gt;&amp;1" />
+        </Execute>
+        <Execute>
+          <option name="pattern" value="$env:JAVA_HOME = &quot;C:\Program Files\Android\Android Studio\jbr&quot;" />
+        </Execute>
+        <Execute>
+          <option name="pattern" value="$env:PATH = &quot;$env:JAVA_HOME\bin;$env:PATH&quot;" />
+        </Execute>
+        <Execute>
+          <option name="pattern" value=".gradlew.bat clean *" />
+        </Execute>
+        <Execute>
+          <option name="pattern" value=".gradlew.bat dependencies *" />
+        </Execute>
+        <Execute>
+          <option name="pattern" value="Get-ChildItem &quot;$env:USERPROFILE\.gradle\caches\modules-2\files-2.1\com.yandex.android\maps.mobile&quot; -Recurse -Filter &quot;*.jar&quot; -ErrorAction SilentlyContinue" />
+        </Execute>
+        <Execute>
+          <option name="pattern" value="Get-ChildItem &quot;$env:USERPROFILE\.gradle\caches\modules-2\files-2.1\com.yandex.android&quot; -Recurse -ErrorAction SilentlyContinue" />
+        </Execute>
+        <Execute>
+          <option name="pattern" value="Get-ChildItem &quot;$env:USERPROFILE\.gradle\caches\modules-2\files-2.1\com.yandex.android\maps.mobile\4.5.0-full&quot; -Filter &quot;*.jar&quot;" />
+        </Execute>
+        <Execute>
+          <option name="pattern" value="Get-ChildItem &quot;$env:USERPROFILE\.gradle\caches\modules-2\files-2.1\com.yandex.android\maps.mobile\4.5.0-full&quot; -Recurse" />
+        </Execute>
+        <Execute>
+          <option name="pattern" value="Expand-Archive -Path &quot;$env:USERPROFILE\.gradle\caches\modules-2\files-2.1\com.yandex.android\maps.mobile\4.5.0-full\maps.mobile-4.5.0-full.aar&quot; -DestinationPath &quot;$env:TEMP\yandex-mapkit&quot; -Force" />
+        </Execute>
+        <Execute>
+          <option name="pattern" value="Get-ChildItem &quot;$env:USERPROFILE\.gradle\caches\modules-2\files-2.1\com.yandex.android\maps.mobile\4.5.0-full&quot; -Filter &quot;*.aar&quot;" />
+        </Execute>
+        <Execute>
+          <option name="pattern" value="Select-Object FullName" />
+        </Execute>
+        <Execute>
+          <option name="pattern" value="Get-ChildItem &quot;$env:USERPROFILE\.gradle\caches\modules-2\files-2.1\com.yandex.android\maps.mobile\4.5.0-full&quot;" />
+        </Execute>
+        <Execute>
+          <option name="pattern" value="Get-ChildItem &quot;$env:USERPROFILE\.gradle\caches\transforms-3&quot; -Recurse -Filter &quot;maps.mobile*&quot; -ErrorAction SilentlyContinue" />
+        </Execute>
+        <Execute>
+          <option name="pattern" value="Get-ChildItem &quot;$env:USERPROFILE\.gradle\caches\modules-2\files-2.1\com.yandex.android\maps.mobile\4.4.1-full&quot;" />
+        </Execute>
+        <Execute>
+          <option name="pattern" value="ForEach-Object { $_.Name" />
+        </Execute>
+        <Execute>
+          <option name="pattern" value="ForEach-Object { $_.FullName }" />
+        </Execute>
+        <Execute>
+          <option name="pattern" value=".\gradlew.bat app:dependencies --configuration debugCompileClasspath 2&gt;&amp;1" />
+        </Execute>
+        <Execute>
+          <option name="pattern" value="Get-Content $_.FullName -Raw }" />
+        </Execute>
+        <Execute>
+          <option name="pattern" value="Remove-Item &quot;H:\diplom\Christmastrees\app\src\main\java\com\example\christmastrees\data\Marker.kt&quot;" />
+        </Execute>
+        <Execute>
+          <option name="pattern" value="Remove-Item &quot;H:\diplom\Christmastrees\app\src\main\java\com\example\christmastrees\data\Marker.kt&quot;, &quot;H:\diplom\Christmastrees\app\src\main\java\com\example\christmastrees\data\MarkerDao.kt&quot;, &quot;H:\diplom\Christmastrees\app\src\main\java\com\example\christmastrees\data\MarkerDatabase.kt&quot; -Force" />
+        </Execute>
+        <Execute>
+          <option name="pattern" value="$env:JAVA_HOME=C:Program FilesAndroidAndroid Studiojbr" />
+        </Execute>
+        <Execute>
+          <option name="pattern" value="adb devices *" />
+        </Execute>
+        <Execute>
+          <option name="pattern" value="where *" />
+        </Execute>
+        <Execute>
+          <option name="pattern" value="Get-ChildItem -Path &quot;C:\Users&quot; -Recurse -Filter &quot;adb.exe&quot; -ErrorAction SilentlyContinue" />
+        </Execute>
+        <Execute>
+          <option name="pattern" value="Get-ChildItem -Path &quot;C:\Program Files\Android\Android Studio&quot; -Recurse -Filter &quot;adb.exe&quot; -ErrorAction SilentlyContinue" />
+        </Execute>
+        <Execute>
+          <option name="pattern" value="Test-Path &quot;C:\Users\vovaw\AppData\Local\Android\Sdk&quot;" />
+        </Execute>
+        <Execute>
+          <option name="pattern" value="Test-Path &quot;C:\Users\vovaw\AppData\Local\Android\Sdk\platform-tools\adb.exe&quot;" />
+        </Execute>
+        <Execute>
+          <option name="pattern" value="C:UsersvovawAppDataLocalAndroidSdkplatform-toolsadb.exe devices *" />
+        </Execute>
+        <Execute>
+          <option name="pattern" value="&quot;C:\Users\vovaw\AppData\Local\Android\Sdk\platform-tools\adb.exe&quot; -s &quot;adb-AR5FVB6605001018-QSqQxb._adb-tls-connect._tcp&quot; install -r &quot;H:\diplom\Christmastrees\app\build\outputs\apk\debug\app-debug.apk&quot;" />
+        </Execute>
+        <Execute>
+          <option name="pattern" value="&quot;C:\Users\vovaw\AppData\Local\Android\Sdk\platform-tools\adb.exe&quot; -s &quot;adb-AR5FVB6605001018-QSqQxb._adb-tls-connect._tcp&quot; logcat -c" />
+        </Execute>
+        <Execute>
+          <option name="pattern" value="&quot;C:\Users\vovaw\AppData\Local\Android\Sdk\platform-tools\adb.exe&quot; -s &quot;adb-AR5FVB6605001018-QSqQxb._adb-tls-connect._tcp&quot; shell am start -n &quot;com.example.christmastrees/.MainActivity&quot;" />
+        </Execute>
+        <Execute>
+          <option name="pattern" value="Start-Sleep -Seconds 3" />
+        </Execute>
+        <Execute>
+          <option name="pattern" value="&quot;C:\Users\vovaw\AppData\Local\Android\Sdk\platform-tools\adb.exe&quot; -s &quot;adb-AR5FVB6605001018-QSqQxb._adb-tls-connect._tcp&quot; logcat -d -v time -v color" />
+        </Execute>
+        <Execute>
+          <option name="pattern" value="&quot;C:\Users\vovaw\AppData\Local\Android\Sdk\platform-tools\adb.exe&quot; -s &quot;adb-AR5FVB6605001018-QSqQxb._adb-tls-connect._tcp&quot; logcat -d" />
+        </Execute>
+        <Execute>
+          <option name="pattern" value="&quot;C:\Users\vovaw\AppData\Local\Android\Sdk\platform-tools\adb.exe&quot; -s &quot;adb-AR5FVB6605001018-QSqQxb._adb-tls-connect._tcp&quot; shell ps" />
+        </Execute>
+        <Execute>
+          <option name="pattern" value="&quot;C:\Users\vovaw\AppData\Local\Android\Sdk\platform-tools\adb.exe&quot; -s &quot;adb-AR5FVB6605001018-QSqQxb._adb-tls-connect._tcp&quot; logcat -d -v long" />
+        </Execute>
+        <Execute>
+          <option name="pattern" value="&quot;C:\Users\vovaw\AppData\Local\Android\Sdk\platform-tools\adb.exe&quot; -s &quot;adb-AR5FVB6605001018-QSqQxb._adb-tls-connect._tcp&quot; logcat -d -b crash" />
+        </Execute>
+        <Execute>
+          <option name="pattern" value="&quot;C:\Users\vovaw\AppData\Local\Android\Sdk\platform-tools\adb.exe&quot; -s &quot;adb-AR5FVB6605001018-QSqQxb._adb-tls-connect._tcp&quot; logcat -v time &gt; H:\diplom\Christmastrees\logcat_live.txt 2&gt;&amp;1" />
+        </Execute>
+        <Execute>
+          <option name="pattern" value="&quot;C:\Users\vovaw\AppData\Local\Android\Sdk\platform-tools\adb.exe&quot; -s &quot;adb-AR5FVB6605001018-QSqQxb._adb-tls-connect._tcp&quot; logcat -d -b crash -v long" />
+        </Execute>
+        <Execute>
+          <option name="pattern" value="&quot;C:\Users\vovaw\AppData\Local\Android\Sdk\platform-tools\adb.exe&quot; -s &quot;adb-AR5FVB6605001018-QSqQxb._adb-tls-connect._tcp&quot; uninstall com.example.christmastrees" />
+        </Execute>
+        <Execute>
+          <option name="pattern" value="C:UsersvovawAppDataLocalAndroidSdkplatform-toolsadb.exe tcpip *" />
+        </Execute>
+        <Execute>
+          <option name="pattern" value="&quot;C:\Users\vovaw\AppData\Local\Android\Sdk\platform-tools\adb.exe&quot; -s &quot;adb-AR5FVB6605001018-QSqQxb._adb-tls-connect._tcp&quot; shell am start -n &quot;com.example.christmastrees/.MainActivity&quot; -S" />
+        </Execute>
+        <Execute>
+          <option name="pattern" value="&quot;C:\Users\vovaw\AppData\Local\Android\Sdk\platform-tools\adb.exe&quot; -s &quot;adb-AR5FVB6605001018-QSqQxb._adb-tls-connect._tcp&quot; logcat -d -v time" />
+        </Execute>
+        <Execute>
+          <option name="pattern" value="Select-String christmastrees *" />
+        </Execute>
+        <Execute>
+          <option name="pattern" value="&quot;C:\Users\vovaw\AppData\Local\Android\Sdk\platform-tools\adb.exe&quot; -s &quot;adb-AR5FVB6605001018-QSqQxb._adb-tls-connect._tcp&quot; logcat -d -b crash -v time" />
+        </Execute>
+        <Execute>
+          <option name="pattern" value="&quot;C:\Users\vovaw\AppData\Local\Android\Sdk\platform-tools\adb.exe&quot; -s &quot;adb-AR5FVB6605001018-QSqQxb._adb-tls-connect._tcp&quot; logcat -d -v time -b main" />
+        </Execute>
+        <Execute>
+          <option name="pattern" value="&quot;C:\Users\vovaw\AppData\Local\Android\Sdk\platform-tools\adb.exe&quot; -s &quot;adb-AR5FVB6605001018-QSqQxb._adb-tls-connect._tcp&quot; logcat -d -b system -v time" />
+        </Execute>
+        <Execute>
+          <option name="pattern" value="Select-Object -Last 20" />
+        </Execute>
+        <Execute>
+          <option name="pattern" value="&quot;C:\Users\vovaw\AppData\Local\Android\Sdk\platform-tools\adb.exe&quot; -s &quot;adb-AR5FVB6605001018-QSqQxb._adb-tls-connect._tcp&quot; logcat -v time -s ActivityManager:W ActivityManager:I PackageManager:I" />
+        </Execute>
+        <Execute>
+          <option name="pattern" value="C:\Users\vovaw\AppData\Local\Android\Sdk\platform-tools\adb.exe -P 5037 -s &quot;adb-AR5FVB6605001018-QSqQxb._adb-tls-connect._tcp&quot; install -r &quot;H:\diplom\Christmastrees\app\build\outputs\apk\debug\app-debug.apk&quot;" />
+        </Execute>
+        <Execute>
+          <option name="pattern" value="C:\Users\vovaw\AppData\Local\Android\Sdk\platform-tools\adb.exe -P 5037 -s &quot;adb-AR5FVB6605001018-QSqQxb._adb-tls-connect._tcp&quot; shell am start -n com.example.christmastrees/.MainActivity -a android.intent.action.MAIN -c android.intent.category.LAUNCHER" />
+        </Execute>
+        <Execute>
+          <option name="pattern" value="C:\Users\vovaw\AppData\Local\Android\Sdk\platform-tools\adb.exe -P 5037 -s &quot;adb-AR5FVB6605001018-QSqQxb._adb-tls-connect._tcp&quot; logcat -d -s AndroidRuntime:W DEBUG:W PackageManager:V -t &quot;200&quot;" />
+        </Execute>
+        <Execute>
+          <option name="pattern" value="C:\Users\vovaw\AppData\Local\Android\Sdk\platform-tools\adb.exe -P 5037 -s &quot;adb-AR5FVB6605001018-QSqQxb._adb-tls-connect._tcp&quot; logcat -d -s &quot;*:E -AndroidRuntime&quot; -t &quot;300&quot;" />
+        </Execute>
+        <Execute>
+          <option name="pattern" value="C:\Users\vovaw\AppData\Local\Android\Sdk\platform-tools\adb.exe -P 5037 -s &quot;adb-AR5FVB6605001018-QSqQxb._adb-tls-connect._tcp&quot; shell ps -e" />
+        </Execute>
+        <Execute>
+          <option name="pattern" value="C:\Users\vovaw\AppData\Local\Android\Sdk\platform-tools\adb.exe -P 5037 -s &quot;adb-AR5FVB6605001018-QSqQxb._adb-tls-connect._tcp&quot; logcat -d -b main -t &quot;500&quot;" />
+        </Execute>
+        <Execute>
+          <option name="pattern" value="C:\Users\vovaw\AppData\Local\Android\Sdk\platform-tools\adb.exe -P 5037 -s &quot;adb-AR5FVB6605001018-QSqQxb._adb-tls-connect._tcp&quot; logcat -d -s PackageManager:V ActivityManager:V -t &quot;100&quot;" />
+        </Execute>
+        <Execute>
+          <option name="pattern" value="C:\Users\vovaw\AppData\Local\Android\Sdk\platform-tools\adb.exe -P 5037 -s &quot;adb-AR5FVB6605001018-QSqQxb._adb-tls-connect._tcp&quot; logcat -d -b crash -t &quot;200&quot;" />
+        </Execute>
+        <Execute>
+          <option name="pattern" value="C:\Users\vovaw\AppData\Local\Android\Sdk\platform-tools\adb.exe -P 5037 -s &quot;adb-AR5FVB6605001018-QSqQxb._adb-tls-connect._tcp&quot; logcat -c" />
+        </Execute>
+        <Execute>
+          <option name="pattern" value="C:\Users\vovaw\AppData\Local\Android\Sdk\platform-tools\adb.exe -P 5037 -s &quot;adb-AR5FVB6605001018-QSqQxb._adb-tls-connect._tcp&quot; shell pm list packages" />
+        </Execute>
+        <Execute>
+          <option name="pattern" value="C:\Users\vovaw\AppData\Local\Android\Sdk\platform-tools\adb.exe -P 5037 -s &quot;adb-AR5FVB6605001018-QSqQxb._adb-tls-connect._tcp&quot; install &quot;H:\diplom\Christmastrees\app\build\outputs\apk\debug\app-debug.apk&quot;" />
+        </Execute>
+        <Execute>
+          <option name="pattern" value="findstr christmastrees *" />
+        </Execute>
+        <Execute>
+          <option name="pattern" value="C:\Users\vovaw\AppData\Local\Android\Sdk\platform-tools\adb.exe -P 5037 -s &quot;adb-AR5FVB6605001018-QSqQxb._adb-tls-connect._tcp&quot; shell am start -n com.example.christmastrees/.MainActivity" />
+        </Execute>
+        <Execute>
+          <option name="pattern" value="timeout /t 3 /nobreak &gt;nul" />
+        </Execute>
+        <Execute>
+          <option name="pattern" value="C:\Users\vovaw\AppData\Local\Android\Sdk\platform-tools\adb.exe -P 5037 -s &quot;adb-AR5FVB6605001018-QSqQxb._adb-tls-connect._tcp&quot; logcat -d -s &quot;*:E *:F&quot; -t &quot;300&quot;" />
+        </Execute>
+        <Execute>
+          <option name="pattern" value="C:\Users\vovaw\AppData\Local\Android\Sdk\platform-tools\adb.exe -P 5037 -s &quot;adb-AR5FVB6605001018-QSqQxb._adb-tls-connect._tcp&quot; logcat -d -t &quot;500&quot;" />
+        </Execute>
+        <Execute>
+          <option name="pattern" value="C:\Users\vovaw\AppData\Local\Android\Sdk\platform-tools\adb.exe -P 5037 -s &quot;adb-AR5FVB6605001018-QSqQxb._adb-tls-connect._tcp&quot; logcat -d -s ActivityManager:W -t &quot;100&quot;" />
+        </Execute>
+        <Execute>
+          <option name="pattern" value="C:\Users\vovaw\AppData\Local\Android\Sdk\platform-tools\adb.exe -P 5037 -s &quot;adb-AR5FVB6605001018-QSqQxb._adb-tls-connect._tcp&quot; logcat -d -b crash -t &quot;100&quot;" />
+        </Execute>
+        <Execute>
+          <option name="pattern" value="C:\Users\vovaw\AppData\Local\Android\Sdk\platform-tools\adb.exe -P 5037 -s &quot;adb-AR5FVB6605001018-QSqQxb._adb-tls-connect._tcp&quot; uninstall com.example.christmastrees" />
+        </Execute>
+        <Execute>
+          <option name="pattern" value="timeout /t 4 /nobreak &gt;nul" />
+        </Execute>
+        <Execute>
+          <option name="pattern" value="C:\Users\vovaw\AppData\Local\Android\Sdk\platform-tools\adb.exe -P 5037 -s &quot;adb-AR5FVB6605001018-QSqQxb._adb-tls-connect._tcp&quot; logcat -d -s &quot;*:E *:F AndroidRuntime:W&quot; -t &quot;200&quot;" />
+        </Execute>
+        <Execute>
+          <option name="pattern" value="C:\Users\vovaw\AppData\Local\Android\Sdk\platform-tools\adb.exe -P 5037 -s &quot;adb-AR5FVB6605001018-QSqQxb._adb-tls-connect._tcp&quot; logcat -d -s &quot;*:D osmdroid:V&quot; -t &quot;500&quot;" />
+        </Execute>
+        <Execute>
+          <option name="pattern" value="C:\Users\vovaw\AppData\Local\Android\Sdk\platform-tools\adb.exe -P 5037 -s &quot;adb-AR5FVB6605001018-QSqQxb._adb-tls-connect._tcp&quot; logcat -d -s &quot;*:E Network:W&quot; -t &quot;200&quot;" />
+        </Execute>
+        <Execute>
+          <option name="pattern" value="C:\Users\vovaw\AppData\Local\Android\Sdk\platform-tools\adb.exe -P 5037 -s &quot;adb-AR5FVB6605001018-QSqQxb._adb-tls-connect._tcp&quot; logcat -d -t &quot;300&quot;" />
+        </Execute>
+        <Execute>
+          <option name="pattern" value="C:\Users\vovaw\AppData\Local\Android\Sdk\platform-tools\adb.exe -P 5037 -s &quot;adb-AR5FVB6605001018-QSqQxb._adb-tls-connect._tcp&quot; logcat -d -s &quot;*:E *:W&quot; -t &quot;500&quot;" />
+        </Execute>
+        <Execute>
+          <option name="pattern" value="C:\Users\vovaw\AppData\Local\Android\Sdk\platform-tools\adb.exe -P 5037 -s &quot;adb-AR5FVB6605001018-QSqQxb._adb-tls-connect._tcp&quot; shell logcat -d -s &quot;*:V osmdroid:V&quot; -t &quot;1000&quot;" />
+        </Execute>
+        <Execute>
+          <option name="pattern" value="C:\Users\vovaw\AppData\Local\Android\Sdk\platform-tools\adb.exe -P 5037 -s &quot;adb-AR5FVB6605001018-QSqQxb._adb-tls-connect._tcp&quot; logcat -d -s &quot;*:D MapScreen:V&quot; -t &quot;200&quot;" />
+        </Execute>
+        <Execute>
+          <option name="pattern" value="C:\Users\vovaw\AppData\Local\Android\Sdk\platform-tools\adb.exe -P 5037 -s &quot;adb-AR5FVB6605001018-QSqQxb._adb-tls-connect._tcp&quot; logcat -d -s &quot;MapScreen:*:*:D&quot; -t &quot;300&quot;" />
+        </Execute>
+        <Execute>
+          <option name="pattern" value="C:\Users\vovaw\AppData\Local\Android\Sdk\platform-tools\adb.exe -P 5037 -s &quot;adb-AR5FVB6605001018-QSqQxb._adb-tls-connect._tcp&quot; logcat -d -b main -t &quot;1000&quot;" />
+        </Execute>
+        <Execute>
+          <option name="pattern" value="C:\Users\vovaw\AppData\Local\Android\Sdk\platform-tools\adb.exe -P 5037 -s &quot;adb-AR5FVB6605001018-QSqQxb._adb-tls-connect._tcp&quot; logcat -d -v time -t &quot;100&quot;" />
+        </Execute>
+        <Execute>
+          <option name="pattern" value="C:\Users\vovaw\AppData\Local\Android\Sdk\platform-tools\adb.exe -P 5037 -s &quot;adb-AR5FVB6605001018-QSqQxb._adb-tls-connect._tcp&quot; logcat -d -t &quot;1000&quot;" />
+        </Execute>
+        <Execute>
+          <option name="pattern" value="C:\Users\vovaw\AppData\Local\Android\Sdk\platform-tools\adb.exe -P 5037 -s &quot;adb-AR5FVB6605001018-QSqQxb._adb-tls-connect._tcp&quot; logcat -d -s &quot;MapScreen:*&quot; -t &quot;200&quot;" />
+        </Execute>
+        <Execute>
+          <option name="pattern" value="C:\Users\vovaw\AppData\Local\Android\Sdk\platform-tools\adb.exe -P 5037 -s &quot;adb-AR5FVB6605001018-QSqQxb._adb-tls-connect._tcp&quot; logcat -d -b crash -t &quot;300&quot;" />
+        </Execute>
+        <Execute>
+          <option name="pattern" value="C:\Users\vovaw\AppData\Local\Android\Sdk\platform-tools\adb.exe -P 5037 -s &quot;adb-AR5FVB6605001018-QSqQxb._adb-tls-connect._tcp&quot; logcat -d -s &quot;*:E&quot; -t &quot;500&quot;" />
+        </Execute>
+        <Execute>
+          <option name="pattern" value="C:\Users\vovaw\AppData\Local\Android\Sdk\platform-tools\adb.exe -P 5037 -s &quot;adb-AR5FVB6605001018-QSqQxb._adb-tls-connect._tcp&quot; logcat -d -s &quot;ActivityManager:*&quot; -t &quot;500&quot;" />
+        </Execute>
+        <Execute>
+          <option name="pattern" value="C:\Users\vovaw\AppData\Local\Android\Sdk\platform-tools\adb.exe -P 5037 -s &quot;adb-AR5FVB6605001018-QSqQxb._adb-tls-connect._tcp&quot; logcat -d -s &quot;MapScreen:*&quot; -t &quot;500&quot;" />
+        </Execute>
+        <Execute>
+          <option name="pattern" value="C:\Users\vovaw\AppData\Local\Android\Sdk\platform-tools\adb.exe -s adb-AR5FVB6605001018-QSqQxb._adb-tls-connect._tcp install -r H:\diplom\Christmastrees\app\build\outputs\apk\debug\app-debug.apk" />
+        </Execute>
+        <Execute>
+          <option name="pattern" value="C:\Users\vovaw\AppData\Local\Android\Sdk\platform-tools\adb.exe -s adb-AR5FVB6605001018-QSqQxb._adb-tls-connect._tcp logcat -d" />
+        </Execute>
+        <Execute>
+          <option name="pattern" value="C:\Users\vovaw\AppData\Local\Android\Sdk\platform-tools\adb.exe -s adb-AR5FVB6605001018-QSqQxb._adb-tls-connect._tcp shell run-as com.example.christmastrees cat /data/data/com.example.christmastrees/shared_prefs/markers_data.xml" />
+        </Execute>
+        <Execute>
+          <option name="pattern" value="adb -H 127.0.0.1 -P 5037 -s adb-AR5FVB6605001018-QSqQxb._adb-tls-connect._tcp uninstall com.example.christmastrees" />
+        </Execute>
+        <Execute>
+          <option name="pattern" value="&quot;C:\Users\s1ck\AppData\Local\Android\Sdk\platform-tools\adb.exe&quot; -H 127.0.0.1 -P 5037 -s adb-AR5FVB6605001018-QSqQxb._adb-tls-connect._tcp uninstall com.example.christmastrees" />
+        </Execute>
+        <Execute>
+          <option name="pattern" value="Select-Object -First 1 FullName" />
+        </Execute>
+        <Execute>
+          <option name="pattern" value="Get-ChildItem -Path &quot;$env:LOCALAPPDATA\Android\Sdk&quot; -Recurse -Filter &quot;adb.exe&quot; -ErrorAction SilentlyContinue" />
+        </Execute>
+        <Execute>
+          <option name="pattern" value="&quot;C:\Users\vovaw\AppData\Local\Android\Sdk\platform-tools\adb.exe&quot; -H 127.0.0.1 -P 5037 -s adb-AR5FVB6605001018-QSqQxb._adb-tls-connect._tcp uninstall com.example.christmastrees" />
+        </Execute>
+        <Execute>
+          <option name="pattern" value="&quot;C:\Users\vovaw\AppData\Local\Android\Sdk\platform-tools\adb.exe&quot; -H 127.0.0.1 -P 5037 -s adb-AR5FVB6605001018-QSqQxb._adb-tls-connect._tcp install H:\diplom\Christmastrees\app\build\outputs\apk\debug\app-debug.apk" />
+        </Execute>
+      </list>
+    </option>
+    <option name="autoApprovedReads">
+      <list>
+        <Read>
+          <option name="pattern" value="/Users/vy1178967/Desktop/Dev/scratch/test/*" />
+        </Read>
+        <Read>
+          <option name="pattern" value="/Users/vy1178967/Desktop/*" />
+        </Read>
+        <Read>
+          <option name="pattern" value="/Users/sly/Desktop/android bug/fatal.png" />
+        </Read>
+        <Read>
+          <option name="pattern" value="/Users/sly/Desktop/android bug/*" />
+        </Read>
+        <Read>
+          <option name="pattern" value="/Users/sly/Desktop/*" />
+        </Read>
+        <Read>
+          <option name="pattern" value="/Users/guwenting/developer/code/huawei/ai-agents-workspace/android-exception-crash.png" />
+        </Read>
+        <Read>
+          <option name="pattern" value="/Users/guwenting/developer/code/huawei/ai-agents-workspace/*" />
+        </Read>
+      </list>
+    </option>
+  </component>
+</project>
