@@ -16,6 +16,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import com.example.christmastrees.data.MarkerType
+import com.example.christmastrees.util.SettingsManager
 
 data class UiState(
     val markers: List<Marker> = emptyList(),
@@ -27,7 +28,8 @@ data class UiState(
     val isLoadingLocation: Boolean = false,
     val placeMarkerMode: PlaceMarkerMode = PlaceMarkerMode.Idle,
     val isSnowEnabled: Boolean = true,
-    val showOwnerSearchHint: Boolean = false
+    val showOwnerSearchHint: Boolean = false,
+    val centerOnLocation: Boolean = false
 )
 
 private fun computeCounts(m: List<Marker>): IntArray {
@@ -69,7 +71,7 @@ class MarkersViewModel(
         private set
     
     var uiState by mutableStateOf(UiState())
-        private set
+        internal set
     
     private var nextId = 1L
     var onMarkerAdded: ((Marker) -> Unit)? = null
@@ -79,6 +81,8 @@ class MarkersViewModel(
         try {
             checkLocationPermission()
             loadMarkersFromStorage()
+            val snowEnabled = loadSnowState()
+            uiState = uiState.copy(isSnowEnabled = snowEnabled)
             syncUiState()
         } catch (e: Exception) {
             e.printStackTrace()
@@ -140,11 +144,21 @@ class MarkersViewModel(
     }
 
     fun toggleSnow() {
-        uiState = uiState.copy(isSnowEnabled = !uiState.isSnowEnabled)
+        val newState = !uiState.isSnowEnabled
+        uiState = uiState.copy(isSnowEnabled = newState)
+        SettingsManager.saveSnowEnabled(context, newState)
+    }
+
+    private fun loadSnowState(): Boolean {
+        return SettingsManager.isSnowEnabled(context)
     }
 
     fun toggleOwnerSearchHint() {
         uiState = uiState.copy(showOwnerSearchHint = !uiState.showOwnerSearchHint)
+    }
+
+    fun centerOnCurrentLocation() {
+        uiState = uiState.copy(centerOnLocation = true)
     }
 
     private fun saveMarkers() {

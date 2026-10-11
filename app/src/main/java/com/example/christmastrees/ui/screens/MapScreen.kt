@@ -22,32 +22,24 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.filled.WbSunny
+import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
-import androidx.compose.runtime.snapshotFlow
-import kotlinx.coroutines.flow.collectLatest
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.distinctUntilChanged
-import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color as ComposeColor
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
-import androidx.core.content.ContextCompat
 import com.example.christmastrees.data.MarkerType
+import com.example.christmastrees.ui.components.GarlandOverlay
 import com.example.christmastrees.ui.components.MarkerPickerBottomSheet
 import com.example.christmastrees.ui.components.SnowfallOverlay
+import com.example.christmastrees.ui.navigation.LocalShowSettingsDialog
 import com.example.christmastrees.viewmodel.MarkersViewModel
 import org.osmdroid.tileprovider.tilesource.TileSourceFactory
 import org.osmdroid.util.GeoPoint
@@ -57,12 +49,33 @@ import org.osmdroid.views.overlay.Marker as OsmdroidMarker
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MapScreen(
-    viewModel: MarkersViewModel = MarkersViewModel.LocalMarkersViewModel.current ?: throw IllegalStateException("MarkersViewModel not provided")
+    viewModel: MarkersViewModel = MarkersViewModel.LocalMarkersViewModel.current ?: throw IllegalStateException("MarkersViewModel not provided"),
+    showPicker: Boolean,
+    onPickerStateChanged: (Boolean) -> Unit
 ) {
     val context = LocalContext.current
     val uiState = viewModel.uiState
     val markers = viewModel.markers
-    var showPicker by remember { mutableStateOf(false) }
+    var selectedMarkerId by remember { mutableStateOf<Long?>(null) }
+    val mapReady = remember { mutableStateOf(false) }
+    val userLocation = remember { mutableStateOf<GeoPoint?>(null) }
+    var userMarker by remember { mutableStateOf<OsmdroidMarker?>(null) }
+    val mapViewRef = remember { mutableStateOf<MapView?>(null) }
+    val prefs = context.getSharedPreferences("map_settings", android.content.Context.MODE_PRIVATE)
+    var showContextMenu by remember { mutableStateOf(false) }
+    var contextMenuMarkerName by remember { mutableStateOf("") }
+    var contextMenuMarkerQuantity by remember { mutableStateOf("") }
+    var contextMenuOpenedMarkerId by remember { mutableStateOf<Long?>(null) }
+    
+    // Observe settings dialog state and close context menu when opened
+    val showSettings = LocalShowSettingsDialog.current
+    
+    LaunchedEffect(showSettings) {
+        if (showSettings && showContextMenu) {
+            showContextMenu = false
+            contextMenuOpenedMarkerId = null
+        }
+    }
     
     // Global counters from uiState - reactive
     val treesCount by derivedStateOf { uiState.treesCount }
@@ -70,15 +83,6 @@ fun MapScreen(
     val decorationsCount by derivedStateOf { uiState.decorationsCount }
     
     val pendingMarkerType = remember { mutableStateOf<MarkerType?>(null) }
-    val mapReady = remember { mutableStateOf(false) }
-    val userLocation = remember { mutableStateOf<GeoPoint?>(null) }
-    var userMarker by remember { mutableStateOf<OsmdroidMarker?>(null) }
-    val mapViewRef = remember { mutableStateOf<MapView?>(null) }
-    val prefs = context.getSharedPreferences("map_settings", android.content.Context.MODE_PRIVATE)
-    var selectedMarkerId by remember { mutableStateOf<Long?>(null) }
-    var showContextMenu by remember { mutableStateOf(false) }
-    var contextMenuMarkerName by remember { mutableStateOf("") }
-    var contextMenuMarkerQuantity by remember { mutableStateOf("") }
     
     // Drag mode state - activated from context menu
     var isDraggingMarker by remember { mutableStateOf(false) }
@@ -87,6 +91,22 @@ fun MapScreen(
     
     // Owner search hint
     var showOwnerSearchHint by remember { mutableStateOf(false) }
+    
+    // Sync picker state from parent
+    var localShowPicker by remember { mutableStateOf(false) }
+    LaunchedEffect(showPicker) {
+        localShowPicker = showPicker
+    }
+    
+    // Center map on location when requested
+    LaunchedEffect(uiState.centerOnLocation, uiState.currentLocation) {
+        if (uiState.centerOnLocation && uiState.currentLocation != null) {
+            val geoPoint = GeoPoint(uiState.currentLocation!!.latitude, uiState.currentLocation!!.longitude)
+            mapViewRef.value?.controller?.setCenter(geoPoint)
+            mapViewRef.value?.controller?.setZoom(16.0)
+            viewModel.uiState = viewModel.uiState.copy(centerOnLocation = false)
+        }
+    }
     
     // Reactive marker updates on map
     LaunchedEffect(markers) {
@@ -106,7 +126,7 @@ fun MapScreen(
                 for (marker in markers) {
                     val type = marker.markerType()
                     val latLng = GeoPoint(marker.latitude, marker.longitude)
-                    val bitmap = createMarkerBitmapWithQuantity(type.emoji, marker.quantity)
+                    val bitmap = createEmojiMarkerBitmap(type.emoji, marker.quantity)
                     
                     val markerIcon = BitmapDrawable(mapView.resources, bitmap)
                     val osmdroidMarker = OsmdroidMarker(mapView).apply {
@@ -161,7 +181,7 @@ fun MapScreen(
                     val mapView = mapViewRef.value ?: return@post
                     val type = newMarker.markerType()
                     val latLng = GeoPoint(newMarker.latitude, newMarker.longitude)
-                    val bitmap = createMarkerBitmapWithQuantity(type.emoji, newMarker.quantity)
+                    val bitmap = createEmojiMarkerBitmap(type.emoji, newMarker.quantity)
                     
                     val markerIcon = BitmapDrawable(mapView.resources, bitmap)
                     val osmdroidMarker = OsmdroidMarker(mapView).apply {
@@ -181,7 +201,7 @@ fun MapScreen(
     }
     
     // Save marker state when context menu is opened (to close it on tap outside)
-    var contextMenuOpenedMarkerId by remember { mutableStateOf<Long?>(null) }
+    // contextMenuOpenedMarkerId is declared above
 
     Box(modifier = Modifier.fillMaxSize()) {
         AndroidView(
@@ -339,24 +359,20 @@ fun MapScreen(
                                             showContextMenu = false
                                             contextMenuOpenedMarkerId = null
                                         } else {
-                                            // Check if tap is on an existing marker
+                                            // Check if tap is on an existing marker (pixel-based hitbox)
                                             val proj = mapView.projection
                                             if (proj != null) {
-                                                val tappedGeoPoint = proj.fromPixels(event.x.toInt(), event.y.toInt())
-                                                if (tappedGeoPoint != null) {
-                                                    val currentMarkers = mapView.overlays.filterIsInstance<OsmdroidMarker>()
-                                                    for (marker in currentMarkers) {
-                                                        if (marker.title != null && marker.title != "Вы здесь") {
-                                                            val markerPos = GeoPoint(marker.position.latitude, marker.position.longitude)
-                                                            val distances = FloatArray(1)
-                                                            android.location.Location.distanceBetween(
-                                                                tappedGeoPoint.latitude,
-                                                                tappedGeoPoint.longitude,
-                                                                markerPos.latitude,
-                                                                markerPos.longitude,
-                                                                distances
-                                                            )
-                                                            if (distances[0] < 100f) {
+                                                val currentMarkers = mapView.overlays.filterIsInstance<OsmdroidMarker>()
+                                                for (marker in currentMarkers) {
+                                                    if (marker.title != null && marker.title != "Вы здесь") {
+                                                        val markerScreenPos = proj.toPixels(marker.position, null)
+                                                        if (markerScreenPos != null) {
+                                                            val dx = event.x - markerScreenPos.x
+                                                            val dy = event.y - markerScreenPos.y
+                                                            val distance = kotlin.math.sqrt(dx * dx + dy * dy)
+                                                            // Hitbox scales with zoom: larger at low zoom for easier tapping
+                                                            val hitboxRadius = 60f * (10f / mapView.zoomLevel)
+                                                            if (distance < hitboxRadius) {
                                                                 selectedMarkerId = marker.title.toLongOrNull()
                                                                 showContextMenu = true
                                                                 contextMenuOpenedMarkerId = marker.title.toLongOrNull()
@@ -397,55 +413,8 @@ fun MapScreen(
             }
         )
 
-        // Bottom action buttons - horizontal row
-        if (pendingMarkerType.value == null) {
-            Row(
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .padding(bottom = 80.dp, start = 16.dp, end = 16.dp),
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                // Location button
-                FloatingActionButton(
-                    onClick = {
-                        viewModel.requestLocationUpdate()
-                        android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
-                            uiState.currentLocation?.let { location ->
-                                val geoPoint = GeoPoint(location.latitude, location.longitude)
-                                mapViewRef.value?.controller?.setCenter(geoPoint)
-                                mapViewRef.value?.controller?.setZoom(16.0)
-                            }
-                        }, 2000)
-                    },
-                    containerColor = MaterialTheme.colorScheme.primary,
-                    contentColor = MaterialTheme.colorScheme.secondary
-                ) {
-                    Icon(Icons.Default.LocationOn, contentDescription = "Go to my location", tint = MaterialTheme.colorScheme.secondary)
-                }
-
-                // Add marker button
-                FloatingActionButton(
-                    onClick = { showPicker = true },
-                    containerColor = MaterialTheme.colorScheme.primary,
-                    contentColor = MaterialTheme.colorScheme.secondary
-                ) {
-                    Icon(Icons.Default.Add, contentDescription = "Add marker", tint = MaterialTheme.colorScheme.secondary)
-                }
-
-                // Owner search button
-                FloatingActionButton(
-                    onClick = {
-                        showOwnerSearchHint = !showOwnerSearchHint
-                        viewModel.toggleOwnerSearchHint()
-                    },
-                    containerColor = MaterialTheme.colorScheme.primary,
-                    contentColor = MaterialTheme.colorScheme.secondary
-                ) {
-                    Icon(Icons.Default.Search, contentDescription = "Search owner", tint = MaterialTheme.colorScheme.secondary)
-                }
-            }
-        } else {
-            // Show tap hint and cancel button
+        // Show tap hint when placing a marker
+        if (pendingMarkerType.value != null) {
             Column(
                 modifier = Modifier
                     .fillMaxSize()
@@ -459,7 +428,8 @@ fun MapScreen(
                     color = MaterialTheme.colorScheme.primaryContainer
                 ) {
                     Row(
-                        modifier = Modifier.padding(12.dp)
+                        modifier = Modifier.padding(12.dp),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
                             text = pendingMarkerType.value!!.emoji,
@@ -469,18 +439,17 @@ fun MapScreen(
                         Text(
                             text = "Нажмите на карту, чтобы поставить ${pendingMarkerType.value!!.label}",
                             modifier = Modifier.weight(1f),
-                            style = MaterialTheme.typography.bodyMedium,
-                            fontWeight = FontWeight.Medium
+                            style = MaterialTheme.typography.bodyMedium
                         )
                     }
                 }
-                
+
                 Spacer(modifier = Modifier.weight(1f))
-                
+
                 FloatingActionButton(
                     onClick = { pendingMarkerType.value = null }
                 ) {
-                    Icon(Icons.Default.Close, contentDescription = "Cancel placement")
+                    Icon(Icons.Default.Close, contentDescription = "Отмена размещения")
                 }
             }
         }
@@ -529,8 +498,9 @@ fun MapScreen(
 
                                 // Editable name field
                                 Text(
-                                    text = "Имя", fontWeight = FontWeight.Medium,
-                                    fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    text = "Имя",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                                 BasicTextField(
                                     value = contextMenuMarkerName,
@@ -551,7 +521,7 @@ fun MapScreen(
                                         if (contextMenuMarkerName.isEmpty()) {
                                             Text(
                                                 text = selectedMarker.markerType().label,
-                                                fontSize = 14.sp,
+                                                style = MaterialTheme.typography.bodyMedium,
                                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                                             )
                                         }
@@ -561,8 +531,9 @@ fun MapScreen(
 
                                 // Editable quantity field
                                 Text(
-                                    text = "Количество", fontWeight = FontWeight.Medium,
-                                    fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    text = "Количество",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                                 Row(
                                     modifier = Modifier.fillMaxWidth(),
@@ -700,7 +671,7 @@ fun MapScreen(
                             Text(
                                 text = "Перемещение маркера. Нажмите на карту, чтобы установить новую позицию.",
                                 color = MaterialTheme.colorScheme.onSecondary,
-                                fontSize = 14.sp
+                                style = MaterialTheme.typography.bodyMedium
                             )
                         }
                         TextButton(
@@ -729,7 +700,7 @@ fun MapScreen(
                             Text(
                                 text = "Отмена",
                                 color = MaterialTheme.colorScheme.onSecondary,
-                                fontWeight = FontWeight.Bold
+                                style = MaterialTheme.typography.labelLarge
                             )
                         }
                     }
@@ -738,13 +709,17 @@ fun MapScreen(
         }
 
         // Picker bottom sheet
-        if (showPicker) {
+        if (localShowPicker) {
             MarkerPickerBottomSheet(
                 onTypeSelected = { type ->
-                    showPicker = false
+                    localShowPicker = false
+                    onPickerStateChanged(false)
                     pendingMarkerType.value = type
                 },
-                onDismiss = { showPicker = false }
+                onDismiss = {
+                    localShowPicker = false
+                    onPickerStateChanged(false)
+                }
             )
         }
 
@@ -758,6 +733,9 @@ fun MapScreen(
             }
         }
         
+        // Garland overlay at the top
+        GarlandOverlay()
+
         // Snowfall overlay
         if (uiState.isSnowEnabled) {
             SnowfallOverlay(modifier = Modifier.fillMaxSize())
@@ -771,22 +749,19 @@ fun MapScreen(
             horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             CounterCard(
-                emoji = "🎄",
+                markerType = MarkerType.CHRISTMAS_TREE,
                 count = treesCount,
-                label = "Ёлки",
-                modifier = Modifier
+                label = "Ёлки"
             )
             CounterCard(
-                emoji = "⛄",
+                markerType = MarkerType.SNOWMAN,
                 count = snowmenCount,
-                label = "Снеговики",
-                modifier = Modifier
+                label = "Снеговики"
             )
             CounterCard(
-                emoji = "🎊",
+                markerType = MarkerType.CITY_DECORATION,
                 count = decorationsCount,
-                label = "Украшения",
-                modifier = Modifier
+                label = "Украшения"
             )
         }
     }
@@ -824,21 +799,23 @@ private fun createLocationBitmap(zoomLevel: Double): Bitmap {
 
 @Composable
 private fun CounterCard(
-    emoji: String,
+    markerType: MarkerType,
     count: Int,
     label: String,
     modifier: Modifier = Modifier
 ) {
     Card(
-        modifier = modifier.width(60.dp).height(60.dp),
+        modifier = modifier.wrapContentWidth().wrapContentHeight(),
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.primary
         ),
         elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
-        shape = RoundedCornerShape(12.dp)
+        shape = RoundedCornerShape(16.dp)
     ) {
         Box(
-            modifier = Modifier.fillMaxSize(),
+            modifier = Modifier
+                .width(80.dp)
+                .height(80.dp),
             contentAlignment = Alignment.Center
         ) {
             Column(
@@ -846,13 +823,12 @@ private fun CounterCard(
                 verticalArrangement = Arrangement.Center
             ) {
                 Text(
-                    text = emoji,
+                    text = markerType.emoji,
                     fontSize = 20.sp
                 )
                 Text(
                     text = count.toString(),
-                    fontSize = 16.sp,
-                    fontWeight = FontWeight.Bold,
+                    style = MaterialTheme.typography.titleSmall,
                     color = MaterialTheme.colorScheme.secondary
                 )
             }
@@ -860,89 +836,425 @@ private fun CounterCard(
     }
 }
 
-private fun createMarkerBitmapWithQuantity(emoji: String, quantity: Int): Bitmap {
+private fun createEmojiMarkerBitmap(emoji: String, quantity: Int): Bitmap {
     val size = 100
     val bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
     val canvas = Canvas(bitmap)
+    val cx = size / 2f
+    val cy = size / 2f
     
-    // Draw white circle background
-    val paint = Paint().apply {
-        color = Color.WHITE
+    // Draw background circle
+    val bgPaint = Paint().apply {
+        color = android.graphics.Color.parseColor("#E3F2FD")
         isAntiAlias = true
     }
-    canvas.drawCircle(size / 2f, size / 2f, size / 2f, paint)
+    canvas.drawCircle(cx, cy, size / 2f, bgPaint)
     
-    // Draw border
+    // Draw border circle
     val borderPaint = Paint().apply {
-        color = Color.GRAY
-        strokeWidth = 4f
+        color = android.graphics.Color.parseColor("#FFFFFF")
+        strokeWidth = 3f
         isAntiAlias = true
         style = Paint.Style.STROKE
     }
-    canvas.drawCircle(size / 2f, size / 2f, size / 2f - 2f, borderPaint)
+    canvas.drawCircle(cx, cy, size / 2f - 2f, borderPaint)
     
-    // Draw emoji
-    val textPaint = Paint().apply {
-        color = Color.BLACK
-        textSize = size * 0.45f
+    // Draw emoji centered
+    val emojiPaint = Paint().apply {
+        textSize = 56f
         isAntiAlias = true
         textAlign = Paint.Align.CENTER
     }
-    canvas.drawText(emoji, size / 2f, size * 0.6f, textPaint)
+    canvas.drawText(emoji, cx, cy + 18f, emojiPaint)
     
-    // Draw quantity badge (larger red circle with white number) at top-right
+    // Draw quantity badge at top-right
     if (quantity > 1) {
-        val badgeRadius = 28f
-        val badgeX = size - 22f
-        val badgeY = 22f
+        val badgeRadius = 20f
+        val badgeX = size - 18f
+        val badgeY = 18f
         
         val badgePaint = Paint().apply {
-            color = Color.parseColor("#C62828") // Red
+            color = Color.parseColor("#C62828")
             isAntiAlias = true
         }
         canvas.drawCircle(badgeX, badgeY, badgeRadius, badgePaint)
         
         val badgeTextPaint = Paint().apply {
             color = Color.WHITE
-            textSize = 28f
+            textSize = 20f
             isAntiAlias = true
             textAlign = Paint.Align.CENTER
-            // Vertical centering
-            val textBounds = Rect()
-            textPaint.getTextBounds(quantity.toString(), 0, quantity.toString().length, textBounds)
         }
-        canvas.drawText(quantity.toString(), badgeX, badgeY + 10f, badgeTextPaint)
+        canvas.drawText(quantity.toString(), badgeX, badgeY + 7f, badgeTextPaint)
     }
     
     return bitmap
 }
 
-private fun createMarkerBitmap(emoji: String): Bitmap {
-    val size = 100
-    val bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
-    val canvas = Canvas(bitmap)
+private fun drawRealisticTree(canvas: Canvas, size: Int) {
+    val cx = size / 2f
+    val cy = size / 2f
     
-    val paint = Paint().apply {
-        color = Color.WHITE
+    // Background circle - light blue like snowman
+    val bgPaint = Paint().apply {
+        color = android.graphics.Color.parseColor("#E3F2FD")
         isAntiAlias = true
     }
-    canvas.drawCircle(size / 2f, size / 2f, size / 2f, paint)
+    canvas.drawCircle(cx, cy, size / 2f, bgPaint)
     
-    val borderPaint = Paint().apply {
-        color = Color.GRAY
-        strokeWidth = 4f
+    // Trunk - brown with texture lines
+    val trunkPaint = Paint().apply {
+        color = android.graphics.Color.parseColor("#5D4037")
+        isAntiAlias = true
+    }
+    val trunkLinePaint = Paint().apply {
+        color = android.graphics.Color.parseColor("#4E342E")
+        strokeWidth = 1f
+        isAntiAlias = true
+    }
+    canvas.drawRect(cx - 6f, cy + 16f, cx + 6f, cy + 30f, trunkPaint)
+    // Texture lines on trunk
+    canvas.drawLine(cx - 3f, cy + 18f, cx - 3f, cy + 28f, trunkLinePaint)
+    canvas.drawLine(cx + 2f, cy + 18f, cx + 2f, cy + 28f, trunkLinePaint)
+    
+    // Tree crown - 3 tiers (rich green)
+    val tierPaint = Paint().apply {
+        color = android.graphics.Color.parseColor("#2E7D32")
+        isAntiAlias = true
+    }
+    val highlightPaint = Paint().apply {
+        color = android.graphics.Color.parseColor("#4CAF50")
+        isAntiAlias = true
+    }
+    val shadowPaint = Paint().apply {
+        color = android.graphics.Color.parseColor("#1B5E20")
+        isAntiAlias = true
+    }
+    // Bottom tier
+    canvas.drawPath(createTriangle(cx, cy + 6f, 30f, 22f), tierPaint)
+    canvas.drawPath(createTriangle(cx + 3f, cy + 8f, 24f, 18f), shadowPaint)
+    // Middle tier
+    canvas.drawPath(createTriangle(cx, cy - 8f, 24f, 20f), tierPaint)
+    canvas.drawPath(createTriangle(cx + 2f, cy - 6f, 19f, 16f), shadowPaint)
+    // Top tier
+    canvas.drawPath(createTriangle(cx, cy - 22f, 18f, 18f), tierPaint)
+    canvas.drawPath(createTriangle(cx + 2f, cy - 20f, 14f, 14f), shadowPaint)
+    
+    // Branch highlights (lighter green edges)
+    val edgeHighlightPaint = Paint().apply {
+        color = android.graphics.Color.parseColor("#66BB6A")
+        strokeWidth = 1.5f
+        isAntiAlias = true
+    }
+    // Bottom tier highlights
+    canvas.drawLine(cx - 15f, cy + 18f, cx - 3f, cy + 6f, edgeHighlightPaint)
+    canvas.drawLine(cx + 15f, cy + 18f, cx + 3f, cy + 6f, edgeHighlightPaint)
+    // Middle tier highlights
+    canvas.drawLine(cx - 12f, cy + 4f, cx - 2f, cy - 8f, edgeHighlightPaint)
+    canvas.drawLine(cx + 12f, cy + 4f, cx + 2f, cy - 8f, edgeHighlightPaint)
+    
+    // Gold star on top
+    val starPaint = Paint().apply {
+        color = android.graphics.Color.parseColor("#FFD700")
+        isAntiAlias = true
+    }
+    val starGlowPaint = Paint().apply {
+        color = android.graphics.Color.parseColor("#FFECB3")
+        isAntiAlias = true
+    }
+    canvas.drawPath(createStar(cx, cy - 30f, 4f, 8f), starPaint)
+    canvas.drawPath(createStar(cx, cy - 30f, 2f, 5f), starGlowPaint)
+    
+    // Realistic ornaments (colorful baubles with highlights)
+    val ornamentColors = listOf(
+        android.graphics.Color.parseColor("#D32F2F"), // Red
+        android.graphics.Color.parseColor("#FFD700"), // Gold
+        android.graphics.Color.parseColor("#1976D2"), // Blue
+        android.graphics.Color.parseColor("#C2185B"), // Pink
+        android.graphics.Color.parseColor("#7B1FA2"), // Purple
+        android.graphics.Color.parseColor("#D32F2F")  // Red
+    )
+    val ornamentPositions = listOf(
+        Pair(cx - 12f, cy + 12f), Pair(cx + 10f, cy + 16f),
+        Pair(cx - 8f, cy - 2f), Pair(cx + 12f, cy - 6f),
+        Pair(cx - 6f, cy - 18f), Pair(cx + 7f, cy - 24f)
+    )
+    
+    for (i in ornamentPositions.indices) {
+        val (ox, oy) = ornamentPositions[i]
+        val ornamentColor = ornamentColors[i]
+        
+        // Main ornament sphere
+        val ornamentPaint = Paint().apply {
+            color = ornamentColor
+            isAntiAlias = true
+        }
+        canvas.drawCircle(ox, oy, 3.5f, ornamentPaint)
+        
+        // Highlight (shine effect)
+        val highlightPaint2 = Paint().apply {
+            color = android.graphics.Color.parseColor("#FFFFFF")
+            isAntiAlias = true
+            alpha = 150
+        }
+        canvas.drawCircle(ox - 1f, oy - 1f, 1.5f, highlightPaint2)
+        
+        // Small cap on top of ornament
+        val capPaint = Paint().apply {
+            color = android.graphics.Color.parseColor("#B0BEC5")
+            isAntiAlias = true
+        }
+        canvas.drawRect(ox - 2f, oy - 4.5f, ox + 2f, oy - 3f, capPaint)
+    }
+    
+    // Garland (colorful lights wrapped around tree)
+    val garlandColors = listOf(
+        android.graphics.Color.parseColor("#FF5252"), // Red
+        android.graphics.Color.parseColor("#FFEB3B"), // Yellow
+        android.graphics.Color.parseColor("#448AFF"), // Blue
+        android.graphics.Color.parseColor("#69F0AE"), // Green
+        android.graphics.Color.parseColor("#FF5252"), // Red
+        android.graphics.Color.parseColor("#FFEB3B"), // Yellow
+        android.graphics.Color.parseColor("#448AFF"), // Blue
+        android.graphics.Color.parseColor("#69F0AE")  // Green
+    )
+    val garlandPositions = listOf(
+        Pair(cx - 18f, cy + 14f), Pair(cx + 18f, cy + 14f),
+        Pair(cx - 14f, cy + 4f), Pair(cx + 14f, cy + 4f),
+        Pair(cx - 10f, cy - 10f), Pair(cx + 10f, cy - 10f),
+        Pair(cx - 7f, cy - 20f), Pair(cx + 7f, cy - 20f)
+    )
+    
+    for (i in garlandPositions.indices) {
+        val (gx, gy) = garlandPositions[i]
+        val garlandColor = garlandColors[i]
+        
+        // Light bulb
+        val bulbPaint = Paint().apply {
+            color = garlandColor
+            isAntiAlias = true
+        }
+        canvas.drawCircle(gx, gy, 2f, bulbPaint)
+        
+        // Glow effect
+        val glowPaint = Paint().apply {
+            color = garlandColor
+            isAntiAlias = true
+            alpha = 60
+        }
+        canvas.drawCircle(gx, gy, 4f, glowPaint)
+    }
+    
+    // Snow particles on branches
+    val snowPaint = Paint().apply {
+        color = android.graphics.Color.parseColor("#FFFFFF")
+        isAntiAlias = true
+        alpha = 180
+    }
+    val snowPositions = listOf(
+        Pair(cx - 10f, cy + 10f), Pair(cx + 14f, cy + 12f),
+        Pair(cx - 6f, cy - 4f), Pair(cx + 10f, cy - 10f),
+        Pair(cx - 4f, cy - 18f), Pair(cx + 5f, cy - 22f),
+        Pair(cx - 16f, cy + 16f), Pair(cx + 18f, cy + 8f)
+    )
+    for ((sx, sy) in snowPositions) {
+        canvas.drawCircle(sx, sy, 1.2f, snowPaint)
+    }
+}
+
+private fun createTriangle(cx: Float, topY: Float, bottomWidth: Float, height: Float): android.graphics.Path {
+    val path = android.graphics.Path()
+    path.moveTo(cx, topY)
+    path.lineTo(cx - bottomWidth / 2f, topY + height)
+    path.lineTo(cx + bottomWidth / 2f, topY + height)
+    path.close()
+    return path
+}
+
+private fun createStar(cx: Float, cy: Float, innerRadius: Float, outerRadius: Float): android.graphics.Path {
+    val path = android.graphics.Path()
+    val points = 5
+    for (i in 0 until points * 2) {
+        val radius = if (i % 2 == 0) outerRadius else innerRadius
+        val angle = (Math.PI * i / points) - Math.PI / 2
+        val x = cx + radius * kotlin.math.cos(angle).toFloat()
+        val y = cy + radius * kotlin.math.sin(angle).toFloat()
+        if (i == 0) path.moveTo(x, y)
+        else path.lineTo(x, y)
+    }
+    path.close()
+    return path
+}
+
+private fun drawRealisticSnowman(canvas: Canvas, size: Int) {
+    val cx = size / 2f
+    val cy = size / 2f
+    
+    // Background circle - light blue
+    val bgPaint = Paint().apply {
+        color = android.graphics.Color.parseColor("#E3F2FD")
+        isAntiAlias = true
+    }
+    canvas.drawCircle(cx, cy, size / 2f, bgPaint)
+    
+    // Body - 3 spheres
+    val bodyPaint = Paint().apply {
+        color = android.graphics.Color.parseColor("#FAFAFA")
+        isAntiAlias = true
+    }
+    val shadowPaint = Paint().apply {
+        color = android.graphics.Color.parseColor("#E0E0E0")
+        isAntiAlias = true
+    }
+    canvas.drawCircle(cx, cy + 20f, 20f, bodyPaint)
+    canvas.drawCircle(cx + 3f, cy + 22f, 16f, shadowPaint)
+    canvas.drawCircle(cx, cy, 15f, bodyPaint)
+    canvas.drawCircle(cx + 3f, cy + 2f, 12f, shadowPaint)
+    canvas.drawCircle(cx, cy - 22f, 13f, bodyPaint)
+    canvas.drawCircle(cx + 2f, cy - 20f, 9f, shadowPaint)
+    
+    // Top hat
+    val hatPaint = Paint().apply {
+        color = android.graphics.Color.parseColor("#1C1C1C")
+        isAntiAlias = true
+    }
+    val hatBandPaint = Paint().apply {
+        color = android.graphics.Color.parseColor("#D32F2F")
+        isAntiAlias = true
+    }
+    canvas.drawRoundRect(android.graphics.RectF(cx - 16f, cy - 32f, cx + 16f, cy - 28f), 3f, 3f, hatPaint)
+    canvas.drawRoundRect(android.graphics.RectF(cx - 11f, cy - 46f, cx + 11f, cy - 28f), 3f, 3f, hatPaint)
+    canvas.drawRoundRect(android.graphics.RectF(cx - 11f, cy - 34f, cx + 11f, cy - 28f), 2f, 2f, hatBandPaint)
+    
+    // Scarf
+    val scarfPaint = Paint().apply {
+        color = android.graphics.Color.parseColor("#D32F2F")
+        isAntiAlias = true
+    }
+    val scarfStripePaint = Paint().apply {
+        color = android.graphics.Color.parseColor("#FFC107")
+        isAntiAlias = true
+    }
+    canvas.drawRoundRect(android.graphics.RectF(cx - 14f, cy - 12f, cx + 14f, cy - 4f), 3f, 3f, scarfPaint)
+    canvas.drawRoundRect(android.graphics.RectF(cx + 5f, cy - 4f, cx + 14f, cy + 12f), 2f, 2f, scarfPaint)
+    canvas.drawRect(cx + 7f, cy + 0f, cx + 12f, cy + 3f, scarfStripePaint)
+    
+    // Eyes
+    val coalPaint = Paint().apply {
+        color = android.graphics.Color.parseColor("#212121")
+        isAntiAlias = true
+    }
+    canvas.drawCircle(cx - 5f, cy - 24f, 2.5f, coalPaint)
+    canvas.drawCircle(cx + 5f, cy - 24f, 2.5f, coalPaint)
+    
+    // Carrot nose
+    val nosePaint = Paint().apply {
+        color = android.graphics.Color.parseColor("#FF6D00")
+        isAntiAlias = true
+    }
+    canvas.drawPath(createTriangle(cx, cy - 18f, 2.5f, 10f), nosePaint)
+    
+    // Buttons
+    canvas.drawCircle(cx, cy - 5f, 2f, coalPaint)
+    canvas.drawCircle(cx, cy + 6f, 2f, coalPaint)
+    canvas.drawCircle(cx, cy + 16f, 2f, coalPaint)
+    
+    // Arms
+    val armPaint = Paint().apply {
+        color = android.graphics.Color.parseColor("#5D4037")
+        isAntiAlias = true
+        strokeWidth = 3f
+    }
+    canvas.drawLine(cx - 15f, cy, cx - 26f, cy - 10f, armPaint)
+    canvas.drawLine(cx + 15f, cy, cx + 26f, cy - 9f, armPaint)
+}
+
+private fun drawRealisticOrnament(canvas: Canvas, size: Int) {
+    val cx = size / 2f
+    val cy = size / 2f
+    
+    // Background circle - light blue like snowman
+    val bgPaint = Paint().apply {
+        color = android.graphics.Color.parseColor("#E3F2FD")
+        isAntiAlias = true
+    }
+    canvas.drawCircle(cx, cy, size / 2f, bgPaint)
+    
+    // Main red ball
+    val ballPaint = Paint().apply {
+        color = android.graphics.Color.parseColor("#C62828")
+        isAntiAlias = true
+    }
+    canvas.drawCircle(cx, cy + 2f, 26f, ballPaint)
+    
+    // Ball highlight
+    val ballHighlight = Paint().apply {
+        color = android.graphics.Color.parseColor("#EF5350")
+        isAntiAlias = true
+    }
+    canvas.drawCircle(cx - 7f, cy - 10f, 12f, ballHighlight)
+    
+    // Specular highlight
+    val specularPaint = Paint().apply {
+        color = android.graphics.Color.parseColor("#FFFFFF")
+        isAntiAlias = true
+        alpha = 180
+    }
+    canvas.drawCircle(cx - 9f, cy - 12f, 5f, specularPaint)
+    
+    // Gold cap
+    val goldPaint = Paint().apply {
+        color = android.graphics.Color.parseColor("#FFD700")
+        isAntiAlias = true
+    }
+    canvas.drawRoundRect(android.graphics.RectF(cx - 8f, cy - 26f, cx + 8f, cy - 18f), 2f, 2f, goldPaint)
+    
+    // Hook
+    val hookPaint = Paint().apply {
+        color = android.graphics.Color.parseColor("#FFD700")
+        strokeWidth = 3f
         isAntiAlias = true
         style = Paint.Style.STROKE
     }
-    canvas.drawCircle(size / 2f, size / 2f, size / 2f - 2f, borderPaint)
+    canvas.drawArc(android.graphics.RectF(cx - 6f, cy - 36f, cx + 6f, cy - 18f), 0f, 180f, false, hookPaint)
     
-    val textPaint = Paint().apply {
-        color = Color.BLACK
-        textSize = size * 0.55f
+    // Small blue ornament (left)
+    val blueOrnamentPaint = Paint().apply {
+        color = android.graphics.Color.parseColor("#1565C0")
         isAntiAlias = true
-        textAlign = Paint.Align.CENTER
     }
-    canvas.drawText(emoji, size / 2f, size * 0.65f, textPaint)
+    canvas.drawCircle(cx - 24f, cy + 12f, 10f, blueOrnamentPaint)
+    val blueHighlight = Paint().apply {
+        color = android.graphics.Color.parseColor("#64B5F6")
+        isAntiAlias = true
+        alpha = 150
+    }
+    canvas.drawCircle(cx - 26f, cy + 9f, 4f, blueHighlight)
     
-    return bitmap
+    // Small gold ornament (right)
+    val goldOrnamentPaint = Paint().apply {
+        color = android.graphics.Color.parseColor("#FFB300")
+        isAntiAlias = true
+    }
+    canvas.drawCircle(cx + 24f, cy + 10f, 9f, goldOrnamentPaint)
+    val goldHighlight = Paint().apply {
+        color = android.graphics.Color.parseColor("#FFE082")
+        isAntiAlias = true
+        alpha = 150
+    }
+    canvas.drawCircle(cx + 22f, cy + 8f, 3f, goldHighlight)
+    
+    // Sparkles
+    val sparklePaint = Paint().apply {
+        color = android.graphics.Color.parseColor("#FFFFFF")
+        isAntiAlias = true
+        alpha = 200
+    }
+    val sparklePositions = listOf(
+        Pair(cx - 18f, cy - 16f), Pair(cx + 20f, cy - 18f),
+        Pair(cx - 24f, cy + 2f), Pair(cx + 24f, cy + 2f)
+    )
+    for ((sx, sy) in sparklePositions) {
+        canvas.drawCircle(sx, sy, 2f, sparklePaint)
+    }
 }

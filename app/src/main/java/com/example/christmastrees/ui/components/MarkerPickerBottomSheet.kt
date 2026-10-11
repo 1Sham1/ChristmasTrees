@@ -10,7 +10,6 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.christmastrees.data.MarkerType
@@ -28,7 +27,6 @@ fun MarkerPickerBottomSheet(
         tonalElevation = 8.dp,
         modifier = modifier,
         dragHandle = {
-            // Custom festive drag handle
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -47,8 +45,7 @@ fun MarkerPickerBottomSheet(
         ) {
             Text(
                 text = "✨ Выберите тип объекта",
-                fontSize = 20.sp,
-                fontWeight = FontWeight.Bold,
+                style = MaterialTheme.typography.titleLarge,
                 color = MaterialTheme.colorScheme.onPrimary,
                 modifier = Modifier.fillMaxWidth(),
                 textAlign = androidx.compose.ui.text.style.TextAlign.Center
@@ -89,7 +86,7 @@ private fun MarkerTypeButton(
             containerColor = MaterialTheme.colorScheme.surface
         ),
         elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
-        shape = MaterialTheme.shapes.medium
+        shape = MaterialTheme.shapes.large
     ) {
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
@@ -103,9 +100,8 @@ private fun MarkerTypeButton(
             Spacer(modifier = Modifier.height(4.dp))
             Text(
                 text = type.label,
-                fontSize = 11.sp,
-                color = MaterialTheme.colorScheme.onSurface,
-                fontWeight = FontWeight.Medium
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurface
             )
         }
     }

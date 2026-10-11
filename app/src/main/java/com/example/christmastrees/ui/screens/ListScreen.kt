@@ -10,10 +10,11 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.christmastrees.data.Category
+import com.example.christmastrees.data.MarkerType
+import com.example.christmastrees.ui.components.GarlandOverlay
 import com.example.christmastrees.ui.components.SnowfallOverlay
 import com.example.christmastrees.viewmodel.MarkersViewModel
 import com.example.christmastrees.viewmodel.Marker
@@ -39,8 +40,8 @@ fun ListScreen(
             TopAppBar(
                 title = { 
                     Text(
-                        "🎄 Размещённые объекты",
-                        fontWeight = FontWeight.Bold
+                        "⚔️ Размещённые объекты",
+                        style = MaterialTheme.typography.titleLarge
                     ) 
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
@@ -51,9 +52,15 @@ fun ListScreen(
         },
         containerColor = MaterialTheme.colorScheme.background
     ) { paddingValues ->
+        // Garland overlay at the top
+        GarlandOverlay(modifier = Modifier.fillMaxWidth().height(50.dp))
+
         // Snowfall overlay
         SnowfallOverlay(modifier = Modifier.fillMaxSize())
         
+        Column(modifier = Modifier
+            .fillMaxSize()
+            .padding(paddingValues)) {
         if (markers.isEmpty()) {
             Box(
                 modifier = Modifier
@@ -66,20 +73,19 @@ fun ListScreen(
                     verticalArrangement = Arrangement.Center
                 ) {
                     Text(
-                        text = "🎄",
+                        text = MarkerType.CHRISTMAS_TREE.emoji,
                         fontSize = 64.sp
                     )
                     Spacer(modifier = Modifier.height(16.dp))
                     Text(
                         text = "Пока нет размеченных объектов",
-                        style = MaterialTheme.typography.headlineSmall,
-                        fontWeight = FontWeight.Medium,
+                        style = MaterialTheme.typography.titleMedium,
                         color = MaterialTheme.colorScheme.onBackground
                     )
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(
                         text = "Перейдите на вкладку Карта и добавьте метки!",
-                        style = MaterialTheme.typography.bodyLarge,
+                        style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f)
                     )
                 }
@@ -105,6 +111,7 @@ fun ListScreen(
                 }
             }
         }
+        }
     }
 }
 
@@ -121,9 +128,8 @@ private fun CategoryHeader(category: Category) {
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
         Text(
-            text = "✨ $category",
-            fontSize = 18.sp,
-            fontWeight = FontWeight.Bold,
+            text = "✨ ${category.displayName}",
+            style = MaterialTheme.typography.titleMedium,
             color = MaterialTheme.colorScheme.onPrimary,
             modifier = Modifier.padding(12.dp)
         )
@@ -170,7 +176,6 @@ private fun MarkerListItem(
                 Column {
                     Text(
                         text = type.label,
-                        fontWeight = FontWeight.Medium,
                         style = MaterialTheme.typography.bodyLarge,
                         color = MaterialTheme.colorScheme.onSurface
                     )

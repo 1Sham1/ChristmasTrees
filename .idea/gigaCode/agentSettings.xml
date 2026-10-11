@@ -315,6 +315,15 @@
         <Execute>
           <option name="pattern" value="&quot;C:\Users\vovaw\AppData\Local\Android\Sdk\platform-tools\adb.exe&quot; -H 127.0.0.1 -P 5037 -s adb-AR5FVB6605001018-QSqQxb._adb-tls-connect._tcp shell logcat -s MarkersViewModel:V" />
         </Execute>
+        <Execute>
+          <option name="pattern" value="powershell -Command &quot;(Select-String -Path 'H:/diplom/Christmastrees/app/src/main/java/com/example/christmastrees/ui/screens/MapScreen.kt' -Pattern 'drawBattleSnowman' -AllMatches).Matches.Count&quot;" />
+        </Execute>
+        <Execute>
+          <option name="pattern" value="powershell -Command &quot;(Select-String -Path 'H:/diplom/Christmastrees/app/src/main/java/com/example/christmastrees/ui/screens/MapScreen.kt' -Pattern 'drawRealisticOrnament' -AllMatches).Matches.Count&quot;" />
+        </Execute>
+        <Execute>
+          <option name="pattern" value="powershell -Command &quot;(Select-String -Path 'H:/diplom/Christmastrees/app/src/main/java/com/example/christmastrees/ui/screens/MapScreen.kt' -Pattern 'drawBattleOrnament' -AllMatches).Matches.Count&quot;" />
+        </Execute>
       </list>
     </option>
     <option name="autoApprovedReads">
@@ -339,6 +348,9 @@
         </Read>
         <Read>
           <option name="pattern" value="/Users/guwenting/developer/code/huawei/ai-agents-workspace/*" />
+        </Read>
+        <Read>
+          <option name="pattern" value="/app/*" />
         </Read>
       </list>
     </option>
