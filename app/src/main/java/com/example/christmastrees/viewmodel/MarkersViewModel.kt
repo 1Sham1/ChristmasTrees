@@ -108,7 +108,7 @@ class MarkersViewModel(
                 val timestamp = prefs.getLong("marker_$i.timestamp", 0L)
                 val quantity = prefs.getInt("marker_$i.quantity", 1)
                 
-                markerList.add(Marker(id, lat, lon, type, "", timestamp, quantity))
+                markerList.add(Marker(id, lat, lon, type, name, timestamp, quantity))
             }
             
             if (markerList.isNotEmpty()) {

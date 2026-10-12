@@ -27,6 +27,7 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.material3.Checkbox
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -37,6 +38,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import com.example.christmastrees.data.MarkerType
 import com.example.christmastrees.ui.components.GarlandOverlay
+import com.example.christmastrees.ui.components.LabelOverlay
 import com.example.christmastrees.ui.components.MarkerPickerBottomSheet
 import com.example.christmastrees.ui.components.SnowfallOverlay
 import com.example.christmastrees.ui.navigation.LocalShowSettingsDialog
@@ -66,6 +68,21 @@ fun MapScreen(
     var contextMenuMarkerName by remember { mutableStateOf("") }
     var contextMenuMarkerQuantity by remember { mutableStateOf("") }
     var contextMenuOpenedMarkerId by remember { mutableStateOf<Long?>(null) }
+    var labeledMarkerIds by remember { mutableStateOf<Set<Long>>(emptySet()) }
+    var labelOverlays by remember { mutableStateOf<List<LabelOverlay>>(emptyList()) }
+    
+    // Load saved labeled marker ids
+    LaunchedEffect(Unit) {
+        val saved = prefs.getString("labeled_marker_ids", null)
+        if (saved != null) {
+            labeledMarkerIds = saved.split(",").filter { it.isNotBlank() }.mapNotNull { it.toLongOrNull() }.toSet()
+        }
+    }
+    
+    // Save labeled marker ids when changed
+    LaunchedEffect(labeledMarkerIds) {
+        prefs.edit().putString("labeled_marker_ids", labeledMarkerIds.joinToString(",")).apply()
+    }
     
     // Observe settings dialog state and close context menu when opened
     val showSettings = LocalShowSettingsDialog.current
@@ -109,7 +126,7 @@ fun MapScreen(
     }
     
     // Reactive marker updates on map
-    LaunchedEffect(markers) {
+    LaunchedEffect(markers, labeledMarkerIds) {
         val mapView = mapViewRef.value ?: return@LaunchedEffect
         Handler(Looper.getMainLooper()).post {
             try {
@@ -122,27 +139,42 @@ fun MapScreen(
                 }
                 mapView.overlays.removeAll(markersToRemove)
                 
+                // Remove old label overlays
+                val labelOverlaysToRemove = mutableListOf<LabelOverlay>()
+                for (overlay in mapView.overlays) {
+                    if (overlay is LabelOverlay) {
+                        labelOverlaysToRemove.add(overlay)
+                    }
+                }
+                mapView.overlays.removeAll(labelOverlaysToRemove)
+                
                 // Re-add all markers from ViewModel state
+                val newLabelOverlays = mutableListOf<LabelOverlay>()
                 for (marker in markers) {
                     val type = marker.markerType()
                     val latLng = GeoPoint(marker.latitude, marker.longitude)
-                    val bitmap = createEmojiMarkerBitmap(type.emoji, marker.quantity)
                     
+                    // Always draw OsmdroidMarker for hitbox and visual
+                    val bitmap = createEmojiMarkerBitmap(type.emoji, marker.quantity)
                     val markerIcon = BitmapDrawable(mapView.resources, bitmap)
                     val osmdroidMarker = OsmdroidMarker(mapView).apply {
                         position = latLng
                         setIcon(markerIcon)
                         setAnchor(OsmdroidMarker.ANCHOR_CENTER, OsmdroidMarker.ANCHOR_BOTTOM)
                         title = marker.id.toString()
-                        // NO snippet - prevents popup
-                        setOnMarkerClickListener { clickedMarker, _ ->
-                            // Handled by touch listener
-                            false
-                        }
+                        setOnMarkerClickListener { clickedMarker, _ -> false }
                     }
                     mapView.overlays.add(osmdroidMarker)
+                    
+                    // Additionally add LabelOverlay on top if this marker has labels enabled
+                    if (marker.id in labeledMarkerIds) {
+                        val labelOverlay = LabelOverlay(latLng, marker.name, marker.quantity)
+                        newLabelOverlays.add(labelOverlay)
+                        mapView.overlays.add(labelOverlay)
+                    }
                 }
                 
+                labelOverlays = newLabelOverlays
                 mapView.invalidate()
             } catch (e: Exception) {
                 e.printStackTrace()
@@ -367,8 +399,10 @@ fun MapScreen(
                                                     if (marker.title != null && marker.title != "Вы здесь") {
                                                         val markerScreenPos = proj.toPixels(marker.position, null)
                                                         if (markerScreenPos != null) {
+                                                            // Adjust for emoji visual center (anchor is at bottom, emoji is drawn higher)
+                                                            val emojiVisualCenterY = markerScreenPos.y - 32
                                                             val dx = event.x - markerScreenPos.x
-                                                            val dy = event.y - markerScreenPos.y
+                                                            val dy = event.y - emojiVisualCenterY
                                                             val distance = kotlin.math.sqrt(dx * dx + dy * dy)
                                                             // Hitbox scales with zoom: larger at low zoom for easier tapping
                                                             val hitboxRadius = 60f * (10f / mapView.zoomLevel)
@@ -586,6 +620,40 @@ fun MapScreen(
                                     }
                                 }
 
+                                // Show name label toggle
+                                Row(
+                                    modifier = Modifier
+                                        .wrapContentWidth()
+                                        .clip(RoundedCornerShape(4.dp))
+                                        .background(MaterialTheme.colorScheme.surfaceVariant)
+                                        .clickable {
+                                            if (selectedMarker.id in labeledMarkerIds) {
+                                                labeledMarkerIds = labeledMarkerIds - selectedMarker.id
+                                            } else {
+                                                labeledMarkerIds = labeledMarkerIds + selectedMarker.id
+                                            }
+                                        }
+                                        .padding(horizontal = 6.dp, vertical = 2.dp),
+                                    horizontalArrangement = Arrangement.Center,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        text = "Показать название",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                    Checkbox(
+                                        checked = selectedMarker.id in labeledMarkerIds,
+                                        onCheckedChange = {
+                                            if (it) {
+                                                labeledMarkerIds = labeledMarkerIds + selectedMarker.id
+                                            } else {
+                                                labeledMarkerIds = labeledMarkerIds - selectedMarker.id
+                                            }
+                                        }
+                                    )
+                                }
+
                                 // Save button
                                 Button(
                                     onClick = {
@@ -748,21 +816,21 @@ fun MapScreen(
                 .padding(top = 56.dp, start = 8.dp, end = 8.dp),
             horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            CounterCard(
-                markerType = MarkerType.CHRISTMAS_TREE,
-                count = treesCount,
-                label = "Ёлки"
-            )
-            CounterCard(
-                markerType = MarkerType.SNOWMAN,
-                count = snowmenCount,
-                label = "Снеговики"
-            )
-            CounterCard(
-                markerType = MarkerType.CITY_DECORATION,
-                count = decorationsCount,
-                label = "Украшения"
-            )
+                CounterCard(
+                    markerType = MarkerType.CHRISTMAS_TREE,
+                    count = treesCount,
+                    label = "Ёлки"
+                )
+                CounterCard(
+                    markerType = MarkerType.SNOWMAN,
+                    count = snowmenCount,
+                    label = "Снеговики"
+                )
+                CounterCard(
+                    markerType = MarkerType.CITY_DECORATION,
+                    count = decorationsCount,
+                    label = "Украшения"
+                )
         }
     }
 }
@@ -814,8 +882,8 @@ private fun CounterCard(
     ) {
         Box(
             modifier = Modifier
-                .width(80.dp)
-                .height(80.dp),
+                .width(40.dp)
+                .height(40.dp),
             contentAlignment = Alignment.Center
         ) {
             Column(
@@ -859,13 +927,13 @@ private fun createEmojiMarkerBitmap(emoji: String, quantity: Int): Bitmap {
     }
     canvas.drawCircle(cx, cy, size / 2f - 2f, borderPaint)
     
-    // Draw emoji centered
+    // Draw emoji centered (adjusted for visual center alignment with anchor)
     val emojiPaint = Paint().apply {
         textSize = 56f
         isAntiAlias = true
         textAlign = Paint.Align.CENTER
     }
-    canvas.drawText(emoji, cx, cy + 18f, emojiPaint)
+    canvas.drawText(emoji, cx, cy + 10f, emojiPaint)
     
     // Draw quantity badge at top-right
     if (quantity > 1) {
