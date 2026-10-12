@@ -15,6 +15,7 @@ import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import com.example.christmastrees.data.MarkerSize
 import com.example.christmastrees.data.MarkerType
 import com.example.christmastrees.util.SettingsManager
 
@@ -23,6 +24,15 @@ data class UiState(
     val treesCount: Int = 0,
     val snowmenCount: Int = 0,
     val decorationsCount: Int = 0,
+    val treesSmallCount: Int = 0,
+    val treesNormalCount: Int = 0,
+    val treesBossCount: Int = 0,
+    val snowmenSmallCount: Int = 0,
+    val snowmenNormalCount: Int = 0,
+    val snowmenBossCount: Int = 0,
+    val decorationsSmallCount: Int = 0,
+    val decorationsNormalCount: Int = 0,
+    val decorationsBossCount: Int = 0,
     val currentLocation: Location? = null,
     val isLocationPermissionGranted: Boolean = false,
     val isLoadingLocation: Boolean = false,
@@ -32,18 +42,79 @@ data class UiState(
     val centerOnLocation: Boolean = false
 )
 
-private fun computeCounts(m: List<Marker>): IntArray {
-    var t = 0
-    var s = 0
-    var d = 0
+private fun computeCounts(m: List<Marker>): List<IntArray> {
+    var tTotal = 0
+    var sTotal = 0
+    var dTotal = 0
+    var tSmall = 0
+    var tNormal = 0
+    var tBoss = 0
+    var sSmall = 0
+    var sNormal = 0
+    var sBoss = 0
+    var dSmall = 0
+    var dNormal = 0
+    var dBoss = 0
+
     for (marker in m) {
+        val mSize = marker.markerSize()
         when (marker.markerType()) {
-            MarkerType.CHRISTMAS_TREE -> t += marker.quantity
-            MarkerType.SNOWMAN -> s += marker.quantity
-            MarkerType.CITY_DECORATION -> d += marker.quantity
+            MarkerType.CHRISTMAS_TREE -> {
+                when (mSize) {
+                    MarkerSize.SMALL -> {
+                        tSmall += marker.quantity
+                        tTotal += marker.quantity / 10
+                    }
+                    MarkerSize.NORMAL -> {
+                        tNormal += marker.quantity
+                        tTotal += marker.quantity
+                    }
+                    MarkerSize.BOSS -> {
+                        tBoss += marker.quantity
+                        tTotal += marker.quantity
+                    }
+                }
+            }
+            MarkerType.SNOWMAN -> {
+                when (mSize) {
+                    MarkerSize.SMALL -> {
+                        sSmall += marker.quantity
+                        sTotal += marker.quantity / 10
+                    }
+                    MarkerSize.NORMAL -> {
+                        sNormal += marker.quantity
+                        sTotal += marker.quantity
+                    }
+                    MarkerSize.BOSS -> {
+                        sBoss += marker.quantity
+                        sTotal += marker.quantity
+                    }
+                }
+            }
+            MarkerType.CITY_DECORATION -> {
+                when (mSize) {
+                    MarkerSize.SMALL -> {
+                        dSmall += marker.quantity
+                        dTotal += marker.quantity / 10
+                    }
+                    MarkerSize.NORMAL -> {
+                        dNormal += marker.quantity
+                        dTotal += marker.quantity
+                    }
+                    MarkerSize.BOSS -> {
+                        dBoss += marker.quantity
+                        dTotal += marker.quantity
+                    }
+                }
+            }
         }
     }
-    return intArrayOf(t, s, d)
+    return listOf(
+        intArrayOf(tTotal, sTotal, dTotal),
+        intArrayOf(tSmall, tNormal, tBoss),
+        intArrayOf(sSmall, sNormal, sBoss),
+        intArrayOf(dSmall, dNormal, dBoss)
+    )
 }
 
 sealed interface PlaceMarkerMode {
@@ -58,9 +129,11 @@ data class Marker(
     val type: String,
     val name: String,
     val timestamp: Long,
-    val quantity: Int = 1
+    val quantity: Int = 1,
+    val size: String = MarkerSize.NORMAL.name
 ) {
     fun markerType(): MarkerType = MarkerType.fromString(type)
+    fun markerSize(): MarkerSize = MarkerSize.valueOf(size)
 }
 
 class MarkersViewModel(
@@ -107,8 +180,9 @@ class MarkersViewModel(
                 val name = prefs.getString("marker_$i.name", null) ?: MarkerType.fromString(type).label
                 val timestamp = prefs.getLong("marker_$i.timestamp", 0L)
                 val quantity = prefs.getInt("marker_$i.quantity", 1)
+                val sizeName = prefs.getString("marker_$i.size", null) ?: MarkerSize.NORMAL.name
                 
-                markerList.add(Marker(id, lat, lon, type, name, timestamp, quantity))
+                markerList.add(Marker(id, lat, lon, type, name, timestamp, quantity, sizeName))
             }
             
             if (markerList.isNotEmpty()) {
@@ -130,13 +204,27 @@ class MarkersViewModel(
     
     private fun syncUiState() {
         val counts = computeCounts(markers)
+        val totals = counts[0]
+        val treeSizes = counts[1]
+        val snowmanSizes = counts[2]
+        val decorationSizes = counts[3]
+
         uiState = uiState.copy(
             markers = markers,
-            treesCount = counts[0],
-            snowmenCount = counts[1],
-            decorationsCount = counts[2]
+            treesCount = totals[0],
+            snowmenCount = totals[1],
+            decorationsCount = totals[2],
+            treesSmallCount = treeSizes[0],
+            treesNormalCount = treeSizes[1],
+            treesBossCount = treeSizes[2],
+            snowmenSmallCount = snowmanSizes[0],
+            snowmenNormalCount = snowmanSizes[1],
+            snowmenBossCount = snowmanSizes[2],
+            decorationsSmallCount = decorationSizes[0],
+            decorationsNormalCount = decorationSizes[1],
+            decorationsBossCount = decorationSizes[2]
         )
-        android.util.Log.d("MarkersViewModel", "syncUiState: trees=${counts[0]} snowmen=${counts[1]} decorations=${counts[2]}")
+        android.util.Log.d("MarkersViewModel", "syncUiState: trees=${totals[0]} snowmen=${totals[1]} decorations=${totals[2]}")
     }
     
     fun refreshUiState() {
@@ -177,6 +265,7 @@ class MarkersViewModel(
                 editor.putString("marker_$index.name", marker.name)
                 editor.putLong("marker_$index.timestamp", marker.timestamp)
                 editor.putInt("marker_$index.quantity", marker.quantity)
+                editor.putString("marker_$index.size", marker.size)
             }
             editor.apply()
             
@@ -195,7 +284,8 @@ class MarkersViewModel(
             type = type.name,
             name = type.label,
             timestamp = System.currentTimeMillis(),
-            quantity = 1
+            quantity = 1,
+            size = MarkerSize.NORMAL.name
         )
         markers = markers + newMarker
         android.util.Log.d("MarkersViewModel", "Markers count now: ${markers.size}")
@@ -263,6 +353,17 @@ class MarkersViewModel(
         val idx = newList.indexOfFirst { it.id == markerId }
         if (idx != -1) {
             newList[idx] = newList[idx].copy(latitude = newLatitude, longitude = newLongitude)
+        }
+        markers = newList
+        syncUiState()
+        saveMarkers()
+    }
+
+    fun updateMarkerSize(markerId: Long, newSize: MarkerSize) {
+        val newList = markers.toMutableList()
+        val idx = newList.indexOfFirst { it.id == markerId }
+        if (idx != -1) {
+            newList[idx] = newList[idx].copy(size = newSize.name)
         }
         markers = newList
         syncUiState()

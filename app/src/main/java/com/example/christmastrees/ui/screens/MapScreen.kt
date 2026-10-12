@@ -4,7 +4,7 @@ import android.Manifest
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.Canvas
-import android.graphics.Color
+import android.graphics.Color as AndroidColor
 import android.graphics.Paint
 import android.graphics.Rect
 import android.graphics.drawable.BitmapDrawable
@@ -19,14 +19,20 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Divider
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material3.*
+import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.runtime.*
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.material3.Checkbox
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -36,6 +42,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
+import com.example.christmastrees.data.MarkerSize
 import com.example.christmastrees.data.MarkerType
 import com.example.christmastrees.ui.components.GarlandOverlay
 import com.example.christmastrees.ui.components.LabelOverlay
@@ -68,6 +75,8 @@ fun MapScreen(
     var contextMenuMarkerName by remember { mutableStateOf("") }
     var contextMenuMarkerQuantity by remember { mutableStateOf("") }
     var contextMenuOpenedMarkerId by remember { mutableStateOf<Long?>(null) }
+    var contextMenuMarkerSize by remember { mutableStateOf(MarkerSize.NORMAL) }
+    var showSizeDropdown by remember { mutableStateOf(false) }
     var labeledMarkerIds by remember { mutableStateOf<Set<Long>>(emptySet()) }
     var labelOverlays by remember { mutableStateOf<List<LabelOverlay>>(emptyList()) }
     
@@ -155,7 +164,8 @@ fun MapScreen(
                     val latLng = GeoPoint(marker.latitude, marker.longitude)
                     
                     // Always draw OsmdroidMarker for hitbox and visual
-                    val bitmap = createEmojiMarkerBitmap(type.emoji, marker.quantity)
+                    val markerSize = marker.markerSize()
+                    val bitmap = createEmojiMarkerBitmap(type.emoji, marker.quantity, markerSize)
                     val markerIcon = BitmapDrawable(mapView.resources, bitmap)
                     val osmdroidMarker = OsmdroidMarker(mapView).apply {
                         position = latLng
@@ -168,7 +178,7 @@ fun MapScreen(
                     
                     // Additionally add LabelOverlay on top if this marker has labels enabled
                     if (marker.id in labeledMarkerIds) {
-                        val labelOverlay = LabelOverlay(latLng, marker.name, marker.quantity)
+                        val labelOverlay = LabelOverlay(latLng, marker.name, marker.quantity, markerSize)
                         newLabelOverlays.add(labelOverlay)
                         mapView.overlays.add(labelOverlay)
                     }
@@ -213,7 +223,7 @@ fun MapScreen(
                     val mapView = mapViewRef.value ?: return@post
                     val type = newMarker.markerType()
                     val latLng = GeoPoint(newMarker.latitude, newMarker.longitude)
-                    val bitmap = createEmojiMarkerBitmap(type.emoji, newMarker.quantity)
+                    val bitmap = createEmojiMarkerBitmap(type.emoji, newMarker.quantity, newMarker.markerSize())
                     
                     val markerIcon = BitmapDrawable(mapView.resources, bitmap)
                     val osmdroidMarker = OsmdroidMarker(mapView).apply {
@@ -399,13 +409,18 @@ fun MapScreen(
                                                     if (marker.title != null && marker.title != "Вы здесь") {
                                                         val markerScreenPos = proj.toPixels(marker.position, null)
                                                         if (markerScreenPos != null) {
+                                                            // Find the marker size from ViewModel to calculate hitbox
+                                                            val markerId = marker.title.toLongOrNull()
+                                                            val markerSize = markerId?.let { id -> markers.find { it.id == id }?.markerSize() }
+                                                            val hitboxScale = markerSize?.iconScale ?: 1.0f
+                                                            
                                                             // Adjust for emoji visual center (anchor is at bottom, emoji is drawn higher)
-                                                            val emojiVisualCenterY = markerScreenPos.y - 32
+                                                            val emojiVisualCenterY = markerScreenPos.y - (40f * hitboxScale)
                                                             val dx = event.x - markerScreenPos.x
                                                             val dy = event.y - emojiVisualCenterY
                                                             val distance = kotlin.math.sqrt(dx * dx + dy * dy)
-                                                            // Hitbox scales with zoom: larger at low zoom for easier tapping
-                                                            val hitboxRadius = 60f * (10f / mapView.zoomLevel)
+                                                            // Hitbox scales with zoom and marker size
+                                                            val hitboxRadius = (60f * (10f / mapView.zoomLevel)) * hitboxScale
                                                             if (distance < hitboxRadius) {
                                                                 selectedMarkerId = marker.title.toLongOrNull()
                                                                 showContextMenu = true
@@ -495,6 +510,7 @@ fun MapScreen(
                 if (marker != null) {
                     contextMenuMarkerName = marker.name
                     contextMenuMarkerQuantity = marker.quantity.toString()
+                    contextMenuMarkerSize = marker.markerSize()
                 }
             }
         }
@@ -620,19 +636,97 @@ fun MapScreen(
                                     }
                                 }
 
+                                // Size selector
+                                Text(
+                                    text = "Размер",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                ExposedDropdownMenuBox(
+                                    expanded = showSizeDropdown,
+                                    onExpandedChange = { showSizeDropdown = it }
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .menuAnchor()
+                                            .background(
+                                                MaterialTheme.colorScheme.surfaceVariant,
+                                                RoundedCornerShape(8.dp)
+                                            )
+                                            .clickable(
+                                                interactionSource = remember { MutableInteractionSource() },
+                                                indication = null,
+                                                onClick = { showSizeDropdown = true }
+                                            )
+                                            .padding(horizontal = 12.dp, vertical = 10.dp)
+                                    ) {
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                            modifier = Modifier.fillMaxWidth()
+                                        ) {
+                                            Row(
+                                                verticalAlignment = Alignment.CenterVertically
+                                            ) {
+                                                val sizeEmoji = when (contextMenuMarkerSize) {
+                                                    MarkerSize.SMALL -> "🔹"
+                                                    MarkerSize.NORMAL -> "🔵"
+                                                    MarkerSize.BOSS -> "🔴"
+                                                }
+                                                Text(
+                                                    text = "$sizeEmoji ${contextMenuMarkerSize.label}",
+                                                    style = MaterialTheme.typography.bodyMedium,
+                                                    color = MaterialTheme.colorScheme.onSurface
+                                                )
+                                            }
+                                            Icon(
+                                                imageVector = androidx.compose.material.icons.Icons.Default.ArrowDropDown,
+                                                contentDescription = null,
+                                                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                        }
+                                    }
+                                    
+                                    ExposedDropdownMenu(
+                                        expanded = showSizeDropdown,
+                                        onDismissRequest = { showSizeDropdown = false }
+                                    ) {
+                                        MarkerSize.values().forEach { size ->
+                                            val sizeEmoji = when (size) {
+                                                MarkerSize.SMALL -> "🔹"
+                                                MarkerSize.NORMAL -> "🔵"
+                                                MarkerSize.BOSS -> "🔴"
+                                            }
+                                            DropdownMenuItem(
+                                                onClick = {
+                                                    contextMenuMarkerSize = size
+                                                    viewModel.updateMarkerSize(selectedMarker.id, size)
+                                                    showSizeDropdown = false
+                                                },
+                                                text = { Text("$sizeEmoji ${size.label}", style = MaterialTheme.typography.bodyMedium) }
+                                            )
+                                        }
+                                    }
+                                }
+
                                 // Show name label toggle
                                 Row(
                                     modifier = Modifier
                                         .wrapContentWidth()
                                         .clip(RoundedCornerShape(4.dp))
                                         .background(MaterialTheme.colorScheme.surfaceVariant)
-                                        .clickable {
-                                            if (selectedMarker.id in labeledMarkerIds) {
-                                                labeledMarkerIds = labeledMarkerIds - selectedMarker.id
-                                            } else {
-                                                labeledMarkerIds = labeledMarkerIds + selectedMarker.id
+                                        .clickable(
+                                            interactionSource = remember { MutableInteractionSource() },
+                                            indication = null,
+                                            onClick = {
+                                                if (selectedMarker.id in labeledMarkerIds) {
+                                                    labeledMarkerIds = labeledMarkerIds - selectedMarker.id
+                                                } else {
+                                                    labeledMarkerIds = labeledMarkerIds + selectedMarker.id
+                                                }
                                             }
-                                        }
+                                        )
                                         .padding(horizontal = 6.dp, vertical = 2.dp),
                                     horizontalArrangement = Arrangement.Center,
                                     verticalAlignment = Alignment.CenterVertically
@@ -819,17 +913,26 @@ fun MapScreen(
                 CounterCard(
                     markerType = MarkerType.CHRISTMAS_TREE,
                     count = treesCount,
-                    label = "Ёлки"
+                    label = "Ёлки",
+                    smallCount = uiState.treesSmallCount,
+                    normalCount = uiState.treesNormalCount,
+                    bossCount = uiState.treesBossCount
                 )
                 CounterCard(
                     markerType = MarkerType.SNOWMAN,
                     count = snowmenCount,
-                    label = "Снеговики"
+                    label = "Снеговики",
+                    smallCount = uiState.snowmenSmallCount,
+                    normalCount = uiState.snowmenNormalCount,
+                    bossCount = uiState.snowmenBossCount
                 )
                 CounterCard(
                     markerType = MarkerType.CITY_DECORATION,
                     count = decorationsCount,
-                    label = "Украшения"
+                    label = "Украшения",
+                    smallCount = uiState.decorationsSmallCount,
+                    normalCount = uiState.decorationsNormalCount,
+                    bossCount = uiState.decorationsBossCount
                 )
         }
     }
@@ -846,7 +949,7 @@ private fun createLocationBitmap(zoomLevel: Double): Bitmap {
     val cy = size / 2f
     
     val personPaint = Paint().apply {
-        color = android.graphics.Color.parseColor("#FF6B35")
+        color = AndroidColor.parseColor("#FF6B35")
         strokeWidth = 6f
         isAntiAlias = true
         style = Paint.Style.STROKE
@@ -870,90 +973,182 @@ private fun CounterCard(
     markerType: MarkerType,
     count: Int,
     label: String,
+    smallCount: Int,
+    normalCount: Int,
+    bossCount: Int,
     modifier: Modifier = Modifier
 ) {
+    var expanded by remember { mutableStateOf(false) }
+    
     Card(
-        modifier = modifier.wrapContentWidth().wrapContentHeight(),
+        modifier = modifier
+            .wrapContentWidth()
+            .wrapContentHeight()
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                onClick = { expanded = !expanded }
+            ),
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.primary
         ),
         elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
         shape = RoundedCornerShape(16.dp)
     ) {
-        Box(
-            modifier = Modifier
-                .width(40.dp)
-                .height(40.dp),
-            contentAlignment = Alignment.Center
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center,
+            modifier = Modifier.padding(4.dp)
         ) {
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.Center
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(2.dp)
             ) {
                 Text(
                     text = markerType.emoji,
-                    fontSize = 20.sp
+                    fontSize = 18.sp
                 )
                 Text(
                     text = count.toString(),
                     style = MaterialTheme.typography.titleSmall,
                     color = MaterialTheme.colorScheme.secondary
                 )
+                Icon(
+                    imageVector = if (expanded) 
+                        androidx.compose.material.icons.Icons.Default.KeyboardArrowUp 
+                    else 
+                        androidx.compose.material.icons.Icons.Default.KeyboardArrowDown,
+                    contentDescription = if (expanded) "Свернуть" else "Развернуть",
+                    tint = MaterialTheme.colorScheme.secondary,
+                    modifier = Modifier.size(16.dp)
+                )
+            }
+            
+            if (expanded) {
+                Divider(
+                    color = MaterialTheme.colorScheme.secondary.copy(alpha = 0.3f),
+                    modifier = Modifier.padding(vertical = 4.dp)
+                )
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(2.dp),
+                    modifier = Modifier.padding(top = 4.dp)
+                ) {
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("🔹", fontSize = 10.sp)
+                        Text(
+                            text = smallCount.toString(),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.secondary
+                        )
+                    }
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("🔵", fontSize = 10.sp)
+                        Text(
+                            text = normalCount.toString(),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.secondary
+                        )
+                    }
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("🔴", fontSize = 10.sp)
+                        Text(
+                            text = bossCount.toString(),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.secondary
+                        )
+                    }
+                }
             }
         }
     }
 }
 
-private fun createEmojiMarkerBitmap(emoji: String, quantity: Int): Bitmap {
-    val size = 100
-    val bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
+private fun createEmojiMarkerBitmap(emoji: String, quantity: Int, size: com.example.christmastrees.data.MarkerSize): Bitmap {
+    val bitmapSize = size.iconSize
+    val bitmap = Bitmap.createBitmap(bitmapSize, bitmapSize, Bitmap.Config.ARGB_8888)
     val canvas = Canvas(bitmap)
-    val cx = size / 2f
-    val cy = size / 2f
+    val cx = bitmapSize / 2f
+    val cy = bitmapSize / 2f
     
     // Draw background circle
     val bgPaint = Paint().apply {
-        color = android.graphics.Color.parseColor("#E3F2FD")
+        color = AndroidColor.parseColor("#E3F2FD")
         isAntiAlias = true
     }
-    canvas.drawCircle(cx, cy, size / 2f, bgPaint)
+    canvas.drawCircle(cx, cy, bitmapSize / 2f, bgPaint)
     
-    // Draw border circle
+    // Draw border circle with size-specific color
     val borderPaint = Paint().apply {
-        color = android.graphics.Color.parseColor("#FFFFFF")
-        strokeWidth = 3f
+        color = size.borderColor
+        strokeWidth = (3f * size.iconScale).coerceAtMost(5f)
         isAntiAlias = true
         style = Paint.Style.STROKE
     }
-    canvas.drawCircle(cx, cy, size / 2f - 2f, borderPaint)
+    canvas.drawCircle(cx, cy, bitmapSize / 2f - 2f, borderPaint)
     
-    // Draw emoji centered (adjusted for visual center alignment with anchor)
+    // Draw emoji centered properly using text bounds
+    val emojiTextSize = (size.emojiTextSize * size.iconScale).toFloat()
     val emojiPaint = Paint().apply {
-        textSize = 56f
+        textSize = emojiTextSize
         isAntiAlias = true
         textAlign = Paint.Align.CENTER
     }
-    canvas.drawText(emoji, cx, cy + 10f, emojiPaint)
+    
+    // Measure emoji bounds for proper centering
+    val emojiBounds = Rect()
+    emojiPaint.getTextBounds(emoji, 0, emoji.length, emojiBounds)
+    val emojiHeight = emojiBounds.height().toFloat()
+    val emojiY = cy + emojiHeight / 2f
+    
+    canvas.drawText(emoji, cx, emojiY, emojiPaint)
     
     // Draw quantity badge at top-right
     if (quantity > 1) {
-        val badgeRadius = 20f
-        val badgeX = size - 18f
-        val badgeY = 18f
+        val badgeRadius = (20f * size.iconScale).coerceAtMost(25f)
+        val badgeX = bitmapSize - 18f * size.iconScale
+        val badgeY = 18f * size.iconScale
         
         val badgePaint = Paint().apply {
-            color = Color.parseColor("#C62828")
+            color = size.badgeColor
             isAntiAlias = true
         }
         canvas.drawCircle(badgeX, badgeY, badgeRadius, badgePaint)
         
         val badgeTextPaint = Paint().apply {
-            color = Color.WHITE
-            textSize = 20f
+            color = AndroidColor.WHITE
+            textSize = (20f * size.iconScale).coerceAtMost(24f)
             isAntiAlias = true
             textAlign = Paint.Align.CENTER
         }
-        canvas.drawText(quantity.toString(), badgeX, badgeY + 7f, badgeTextPaint)
+        canvas.drawText(quantity.toString(), badgeX, badgeY + (7f * size.iconScale).toFloat(), badgeTextPaint)
+    }
+    
+    // BOSS: Draw crown/star decoration around the marker
+    if (size == com.example.christmastrees.data.MarkerSize.BOSS) {
+        val starPaint = Paint().apply {
+            color = AndroidColor.parseColor("#FFD700")
+            isAntiAlias = true
+        }
+        // Draw small stars around the border
+        val starPositions = listOf(
+            Pair(cx, 8f * size.iconScale),
+            Pair(bitmapSize - 8f * size.iconScale, cy),
+            Pair(cx, bitmapSize - 8f * size.iconScale),
+            Pair(8f * size.iconScale, cy)
+        )
+        for ((sx, sy) in starPositions) {
+            canvas.drawCircle(sx, sy, 3f * size.iconScale, starPaint)
+        }
     }
     
     return bitmap
@@ -965,18 +1160,18 @@ private fun drawRealisticTree(canvas: Canvas, size: Int) {
     
     // Background circle - light blue like snowman
     val bgPaint = Paint().apply {
-        color = android.graphics.Color.parseColor("#E3F2FD")
+        color = AndroidColor.parseColor("#E3F2FD")
         isAntiAlias = true
     }
     canvas.drawCircle(cx, cy, size / 2f, bgPaint)
     
     // Trunk - brown with texture lines
     val trunkPaint = Paint().apply {
-        color = android.graphics.Color.parseColor("#5D4037")
+        color = AndroidColor.parseColor("#5D4037")
         isAntiAlias = true
     }
     val trunkLinePaint = Paint().apply {
-        color = android.graphics.Color.parseColor("#4E342E")
+        color = AndroidColor.parseColor("#4E342E")
         strokeWidth = 1f
         isAntiAlias = true
     }
@@ -987,15 +1182,15 @@ private fun drawRealisticTree(canvas: Canvas, size: Int) {
     
     // Tree crown - 3 tiers (rich green)
     val tierPaint = Paint().apply {
-        color = android.graphics.Color.parseColor("#2E7D32")
+        color = AndroidColor.parseColor("#2E7D32")
         isAntiAlias = true
     }
     val highlightPaint = Paint().apply {
-        color = android.graphics.Color.parseColor("#4CAF50")
+        color = AndroidColor.parseColor("#4CAF50")
         isAntiAlias = true
     }
     val shadowPaint = Paint().apply {
-        color = android.graphics.Color.parseColor("#1B5E20")
+        color = AndroidColor.parseColor("#1B5E20")
         isAntiAlias = true
     }
     // Bottom tier
@@ -1010,7 +1205,7 @@ private fun drawRealisticTree(canvas: Canvas, size: Int) {
     
     // Branch highlights (lighter green edges)
     val edgeHighlightPaint = Paint().apply {
-        color = android.graphics.Color.parseColor("#66BB6A")
+        color = AndroidColor.parseColor("#66BB6A")
         strokeWidth = 1.5f
         isAntiAlias = true
     }
@@ -1023,11 +1218,11 @@ private fun drawRealisticTree(canvas: Canvas, size: Int) {
     
     // Gold star on top
     val starPaint = Paint().apply {
-        color = android.graphics.Color.parseColor("#FFD700")
+        color = AndroidColor.parseColor("#FFD700")
         isAntiAlias = true
     }
     val starGlowPaint = Paint().apply {
-        color = android.graphics.Color.parseColor("#FFECB3")
+        color = AndroidColor.parseColor("#FFECB3")
         isAntiAlias = true
     }
     canvas.drawPath(createStar(cx, cy - 30f, 4f, 8f), starPaint)
@@ -1035,12 +1230,12 @@ private fun drawRealisticTree(canvas: Canvas, size: Int) {
     
     // Realistic ornaments (colorful baubles with highlights)
     val ornamentColors = listOf(
-        android.graphics.Color.parseColor("#D32F2F"), // Red
-        android.graphics.Color.parseColor("#FFD700"), // Gold
-        android.graphics.Color.parseColor("#1976D2"), // Blue
-        android.graphics.Color.parseColor("#C2185B"), // Pink
-        android.graphics.Color.parseColor("#7B1FA2"), // Purple
-        android.graphics.Color.parseColor("#D32F2F")  // Red
+        AndroidColor.parseColor("#D32F2F"), // Red
+        AndroidColor.parseColor("#FFD700"), // Gold
+        AndroidColor.parseColor("#1976D2"), // Blue
+        AndroidColor.parseColor("#C2185B"), // Pink
+        AndroidColor.parseColor("#7B1FA2"), // Purple
+        AndroidColor.parseColor("#D32F2F")  // Red
     )
     val ornamentPositions = listOf(
         Pair(cx - 12f, cy + 12f), Pair(cx + 10f, cy + 16f),
@@ -1061,7 +1256,7 @@ private fun drawRealisticTree(canvas: Canvas, size: Int) {
         
         // Highlight (shine effect)
         val highlightPaint2 = Paint().apply {
-            color = android.graphics.Color.parseColor("#FFFFFF")
+            color = AndroidColor.parseColor("#FFFFFF")
             isAntiAlias = true
             alpha = 150
         }
@@ -1069,7 +1264,7 @@ private fun drawRealisticTree(canvas: Canvas, size: Int) {
         
         // Small cap on top of ornament
         val capPaint = Paint().apply {
-            color = android.graphics.Color.parseColor("#B0BEC5")
+            color = AndroidColor.parseColor("#B0BEC5")
             isAntiAlias = true
         }
         canvas.drawRect(ox - 2f, oy - 4.5f, ox + 2f, oy - 3f, capPaint)
@@ -1077,14 +1272,14 @@ private fun drawRealisticTree(canvas: Canvas, size: Int) {
     
     // Garland (colorful lights wrapped around tree)
     val garlandColors = listOf(
-        android.graphics.Color.parseColor("#FF5252"), // Red
-        android.graphics.Color.parseColor("#FFEB3B"), // Yellow
-        android.graphics.Color.parseColor("#448AFF"), // Blue
-        android.graphics.Color.parseColor("#69F0AE"), // Green
-        android.graphics.Color.parseColor("#FF5252"), // Red
-        android.graphics.Color.parseColor("#FFEB3B"), // Yellow
-        android.graphics.Color.parseColor("#448AFF"), // Blue
-        android.graphics.Color.parseColor("#69F0AE")  // Green
+        AndroidColor.parseColor("#FF5252"), // Red
+        AndroidColor.parseColor("#FFEB3B"), // Yellow
+        AndroidColor.parseColor("#448AFF"), // Blue
+        AndroidColor.parseColor("#69F0AE"), // Green
+        AndroidColor.parseColor("#FF5252"), // Red
+        AndroidColor.parseColor("#FFEB3B"), // Yellow
+        AndroidColor.parseColor("#448AFF"), // Blue
+        AndroidColor.parseColor("#69F0AE")  // Green
     )
     val garlandPositions = listOf(
         Pair(cx - 18f, cy + 14f), Pair(cx + 18f, cy + 14f),
@@ -1115,7 +1310,7 @@ private fun drawRealisticTree(canvas: Canvas, size: Int) {
     
     // Snow particles on branches
     val snowPaint = Paint().apply {
-        color = android.graphics.Color.parseColor("#FFFFFF")
+        color = AndroidColor.parseColor("#FFFFFF")
         isAntiAlias = true
         alpha = 180
     }
@@ -1160,18 +1355,18 @@ private fun drawRealisticSnowman(canvas: Canvas, size: Int) {
     
     // Background circle - light blue
     val bgPaint = Paint().apply {
-        color = android.graphics.Color.parseColor("#E3F2FD")
+        color = AndroidColor.parseColor("#E3F2FD")
         isAntiAlias = true
     }
     canvas.drawCircle(cx, cy, size / 2f, bgPaint)
     
     // Body - 3 spheres
     val bodyPaint = Paint().apply {
-        color = android.graphics.Color.parseColor("#FAFAFA")
+        color = AndroidColor.parseColor("#FAFAFA")
         isAntiAlias = true
     }
     val shadowPaint = Paint().apply {
-        color = android.graphics.Color.parseColor("#E0E0E0")
+        color = AndroidColor.parseColor("#E0E0E0")
         isAntiAlias = true
     }
     canvas.drawCircle(cx, cy + 20f, 20f, bodyPaint)
@@ -1183,11 +1378,11 @@ private fun drawRealisticSnowman(canvas: Canvas, size: Int) {
     
     // Top hat
     val hatPaint = Paint().apply {
-        color = android.graphics.Color.parseColor("#1C1C1C")
+        color = AndroidColor.parseColor("#1C1C1C")
         isAntiAlias = true
     }
     val hatBandPaint = Paint().apply {
-        color = android.graphics.Color.parseColor("#D32F2F")
+        color = AndroidColor.parseColor("#D32F2F")
         isAntiAlias = true
     }
     canvas.drawRoundRect(android.graphics.RectF(cx - 16f, cy - 32f, cx + 16f, cy - 28f), 3f, 3f, hatPaint)
@@ -1196,11 +1391,11 @@ private fun drawRealisticSnowman(canvas: Canvas, size: Int) {
     
     // Scarf
     val scarfPaint = Paint().apply {
-        color = android.graphics.Color.parseColor("#D32F2F")
+        color = AndroidColor.parseColor("#D32F2F")
         isAntiAlias = true
     }
     val scarfStripePaint = Paint().apply {
-        color = android.graphics.Color.parseColor("#FFC107")
+        color = AndroidColor.parseColor("#FFC107")
         isAntiAlias = true
     }
     canvas.drawRoundRect(android.graphics.RectF(cx - 14f, cy - 12f, cx + 14f, cy - 4f), 3f, 3f, scarfPaint)
@@ -1209,7 +1404,7 @@ private fun drawRealisticSnowman(canvas: Canvas, size: Int) {
     
     // Eyes
     val coalPaint = Paint().apply {
-        color = android.graphics.Color.parseColor("#212121")
+        color = AndroidColor.parseColor("#212121")
         isAntiAlias = true
     }
     canvas.drawCircle(cx - 5f, cy - 24f, 2.5f, coalPaint)
@@ -1217,7 +1412,7 @@ private fun drawRealisticSnowman(canvas: Canvas, size: Int) {
     
     // Carrot nose
     val nosePaint = Paint().apply {
-        color = android.graphics.Color.parseColor("#FF6D00")
+        color = AndroidColor.parseColor("#FF6D00")
         isAntiAlias = true
     }
     canvas.drawPath(createTriangle(cx, cy - 18f, 2.5f, 10f), nosePaint)
@@ -1229,7 +1424,7 @@ private fun drawRealisticSnowman(canvas: Canvas, size: Int) {
     
     // Arms
     val armPaint = Paint().apply {
-        color = android.graphics.Color.parseColor("#5D4037")
+        color = AndroidColor.parseColor("#5D4037")
         isAntiAlias = true
         strokeWidth = 3f
     }
@@ -1243,28 +1438,28 @@ private fun drawRealisticOrnament(canvas: Canvas, size: Int) {
     
     // Background circle - light blue like snowman
     val bgPaint = Paint().apply {
-        color = android.graphics.Color.parseColor("#E3F2FD")
+        color = AndroidColor.parseColor("#E3F2FD")
         isAntiAlias = true
     }
     canvas.drawCircle(cx, cy, size / 2f, bgPaint)
     
     // Main red ball
     val ballPaint = Paint().apply {
-        color = android.graphics.Color.parseColor("#C62828")
+        color = AndroidColor.parseColor("#C62828")
         isAntiAlias = true
     }
     canvas.drawCircle(cx, cy + 2f, 26f, ballPaint)
     
     // Ball highlight
     val ballHighlight = Paint().apply {
-        color = android.graphics.Color.parseColor("#EF5350")
+        color = AndroidColor.parseColor("#EF5350")
         isAntiAlias = true
     }
     canvas.drawCircle(cx - 7f, cy - 10f, 12f, ballHighlight)
     
     // Specular highlight
     val specularPaint = Paint().apply {
-        color = android.graphics.Color.parseColor("#FFFFFF")
+        color = AndroidColor.parseColor("#FFFFFF")
         isAntiAlias = true
         alpha = 180
     }
@@ -1272,14 +1467,14 @@ private fun drawRealisticOrnament(canvas: Canvas, size: Int) {
     
     // Gold cap
     val goldPaint = Paint().apply {
-        color = android.graphics.Color.parseColor("#FFD700")
+        color = AndroidColor.parseColor("#FFD700")
         isAntiAlias = true
     }
     canvas.drawRoundRect(android.graphics.RectF(cx - 8f, cy - 26f, cx + 8f, cy - 18f), 2f, 2f, goldPaint)
     
     // Hook
     val hookPaint = Paint().apply {
-        color = android.graphics.Color.parseColor("#FFD700")
+        color = AndroidColor.parseColor("#FFD700")
         strokeWidth = 3f
         isAntiAlias = true
         style = Paint.Style.STROKE
@@ -1288,12 +1483,12 @@ private fun drawRealisticOrnament(canvas: Canvas, size: Int) {
     
     // Small blue ornament (left)
     val blueOrnamentPaint = Paint().apply {
-        color = android.graphics.Color.parseColor("#1565C0")
+        color = AndroidColor.parseColor("#1565C0")
         isAntiAlias = true
     }
     canvas.drawCircle(cx - 24f, cy + 12f, 10f, blueOrnamentPaint)
     val blueHighlight = Paint().apply {
-        color = android.graphics.Color.parseColor("#64B5F6")
+        color = AndroidColor.parseColor("#64B5F6")
         isAntiAlias = true
         alpha = 150
     }
@@ -1301,12 +1496,12 @@ private fun drawRealisticOrnament(canvas: Canvas, size: Int) {
     
     // Small gold ornament (right)
     val goldOrnamentPaint = Paint().apply {
-        color = android.graphics.Color.parseColor("#FFB300")
+        color = AndroidColor.parseColor("#FFB300")
         isAntiAlias = true
     }
     canvas.drawCircle(cx + 24f, cy + 10f, 9f, goldOrnamentPaint)
     val goldHighlight = Paint().apply {
-        color = android.graphics.Color.parseColor("#FFE082")
+        color = AndroidColor.parseColor("#FFE082")
         isAntiAlias = true
         alpha = 150
     }
@@ -1314,7 +1509,7 @@ private fun drawRealisticOrnament(canvas: Canvas, size: Int) {
     
     // Sparkles
     val sparklePaint = Paint().apply {
-        color = android.graphics.Color.parseColor("#FFFFFF")
+        color = AndroidColor.parseColor("#FFFFFF")
         isAntiAlias = true
         alpha = 200
     }
