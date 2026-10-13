@@ -1,4 +1,4 @@
-package com.example.christmastrees.util
+﻿package com.example.christmastrees.util
 
 import android.media.MediaPlayer
 import androidx.compose.runtime.compositionLocalOf
@@ -117,7 +117,9 @@ class AudioManager private constructor(private val context: android.content.Cont
             }
         }
 
-        fun get(): AudioManager = instance
+        fun get(): AudioManager? = instance
+
+        fun requireGet(): AudioManager = instance
             ?: throw IllegalStateException("AudioManager not initialized. Call init() first.")
 
         fun clear() {

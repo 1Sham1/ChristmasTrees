@@ -1,21 +1,19 @@
-package com.example.christmastrees.ui.components
+﻿package com.example.christmastrees.ui.components
 
-import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.repeatable
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
-import kotlinx.coroutines.coroutineScope
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
 import kotlin.math.sin
 import kotlin.random.Random
 
@@ -44,46 +42,30 @@ fun SnowfallOverlay(
         }
     }
 
-    // Create animation state holders
-    val fallProgress = remember(snowflakeCount) {
-        List(snowflakeCount) { Animatable(0f) }
-    }
-    val driftValues = remember(snowflakeCount) {
-        List(snowflakeCount) { Animatable(0f) }
-    }
-
-    // Start animations for each snowflake
-    snowflakes.forEachIndexed { index, sf ->
+    // Animation state holders — fully managed by Compose, auto-cancelled on disposal
+    val fallProgress = snowflakes.map { sf ->
         val fallDuration = (sf.fallSpeed * 7000f).toInt()
-        
-        LaunchedEffect(index, sf.delay) {
-            // Delay before starting
-            delay(sf.delay)
-            
-            coroutineScope {
-                // Fall animation — loops continuously
-                val fallJob = launch {
-                    while (true) {
-                        fallProgress[index].animateTo(
-                            1f,
-                            animationSpec = tween(fallDuration, easing = LinearEasing)
-                        )
-                        fallProgress[index].snapTo(0f)
-                    }
-                }
+        animateFloatAsState(
+            targetValue = 1f,
+            animationSpec = repeatable(
+                iterations = Int.MAX_VALUE,
+                animation = tween(fallDuration, easing = LinearEasing),
+                repeatMode = RepeatMode.Restart
+            ),
+            label = "fall"
+        )
+    }
 
-                // Drift animation — sinusoidal oscillation
-                val start = System.nanoTime()
-                while (true) {
-                    val elapsed = System.nanoTime() - start
-                    val t = (elapsed % sf.driftPeriod) / sf.driftPeriod.toFloat()
-                    driftValues[index].snapTo(t * 2 * Math.PI.toFloat())
-                    delay(sf.driftPeriod.toLong())
-                }
-
-                fallJob.cancel()
-            }
-        }
+    val driftValues = snowflakes.map { sf ->
+        animateFloatAsState(
+            targetValue = 2f * Math.PI.toFloat(),
+            animationSpec = repeatable(
+                iterations = Int.MAX_VALUE,
+                animation = tween(sf.driftPeriod.toInt(), easing = LinearEasing),
+                repeatMode = RepeatMode.Restart
+            ),
+            label = "drift"
+        )
     }
 
     Canvas(modifier = modifier) {

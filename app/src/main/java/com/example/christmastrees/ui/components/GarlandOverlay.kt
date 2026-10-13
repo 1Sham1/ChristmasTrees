@@ -1,4 +1,4 @@
-package com.example.christmastrees.ui.components
+﻿package com.example.christmastrees.ui.components
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -118,39 +118,39 @@ fun GarlandOverlay(
             drawLine(
                 color = Color(0xFF795548).copy(alpha = 0.8f),
                 start = Offset(bulbX, bulbY),
-                end = Offset(bulbX, bulbY + 8f),
+                end = Offset(bulbX, bulbY + 16f),
                 strokeWidth = 1.5f
             )
 
             // Bulb glow
             drawCircle(
                 color = bulb.color.copy(alpha = alpha * 0.4f),
-                radius = 12f,
-                center = Offset(bulbX, bulbY + 10f),
+                radius = 24f,
+                center = Offset(bulbX, bulbY + 20f),
                 style = Fill
             )
 
             // Bulb body
             drawCircle(
                 color = bulb.color.copy(alpha = 0.5f + alpha * 0.5f),
-                radius = 6f,
-                center = Offset(bulbX, bulbY + 10f),
+                radius = 12f,
+                center = Offset(bulbX, bulbY + 20f),
                 style = Fill
             )
 
             // Bulb highlight
             drawCircle(
                 color = Color.White.copy(alpha = 0.3f * alpha),
-                radius = 2.5f,
-                center = Offset(bulbX - 2f, bulbY + 8f),
+                radius = 5f,
+                center = Offset(bulbX - 4f, bulbY + 16f),
                 style = Fill
             )
 
             // Metal base
             drawRect(
                 color = Color(0xFFB0BEC5).copy(alpha = 0.7f),
-                topLeft = Offset(bulbX - 3f, bulbY + 4f),
-                size = androidx.compose.ui.geometry.Size(6f, 5f)
+                topLeft = Offset(bulbX - 6f, bulbY + 8f),
+                size = androidx.compose.ui.geometry.Size(12f, 10f)
             )
         }
     }

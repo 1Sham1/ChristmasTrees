@@ -324,6 +324,21 @@
         <Execute>
           <option name="pattern" value="powershell -Command &quot;(Select-String -Path 'H:/diplom/Christmastrees/app/src/main/java/com/example/christmastrees/ui/screens/MapScreen.kt' -Pattern 'drawBattleOrnament' -AllMatches).Matches.Count&quot;" />
         </Execute>
+        <Execute>
+          <option name="pattern" value="dir &quot;H:\diplom\Christmastrees\app\src\main\res\font&quot;" />
+        </Execute>
+        <Execute>
+          <option name="pattern" value=".\gradlew.bat assembleDebug --no-daemon" />
+        </Execute>
+        <Execute>
+          <option name="pattern" value="Set-Location &quot;H:\diplom\Christmastrees&quot;" />
+        </Execute>
+        <Execute>
+          <option name="pattern" value="java" />
+        </Execute>
+        <Execute>
+          <option name="pattern" value="Get-ChildItem &quot;C:\Program Files\Java&quot; -Directory" />
+        </Execute>
       </list>
     </option>
     <option name="autoApprovedReads">

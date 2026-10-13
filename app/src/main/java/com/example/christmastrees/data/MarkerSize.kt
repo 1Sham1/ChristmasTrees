@@ -1,4 +1,4 @@
-package com.example.christmastrees.data
+﻿package com.example.christmastrees.data
 
 enum class MarkerSize(
     val label: String,

@@ -1,4 +1,4 @@
-package com.example.christmastrees.ui.screens
+﻿package com.example.christmastrees.ui.screens
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
@@ -10,8 +10,10 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.christmastrees.R
 import com.example.christmastrees.data.Category
 import com.example.christmastrees.data.MarkerType
 import com.example.christmastrees.ui.components.GarlandOverlay
@@ -24,6 +26,7 @@ import com.example.christmastrees.viewmodel.Marker
 fun ListScreen(
     viewModel: MarkersViewModel = MarkersViewModel.LocalMarkersViewModel.current ?: throw IllegalStateException("MarkersViewModel not provided")
 ) {
+    val context = LocalContext.current
     val markers = viewModel.markers
 
     // Group markers by category
@@ -40,7 +43,7 @@ fun ListScreen(
             TopAppBar(
                 title = { 
                     Text(
-                        "⚔️ Размещённые объекты",
+                        context.getString(R.string.list_title),
                         style = MaterialTheme.typography.titleLarge
                     ) 
                 },
@@ -78,13 +81,13 @@ fun ListScreen(
                     )
                     Spacer(modifier = Modifier.height(16.dp))
                     Text(
-                        text = "Пока нет размеченных объектов",
+                        text = context.getString(R.string.list_empty),
                         style = MaterialTheme.typography.titleMedium,
                         color = MaterialTheme.colorScheme.onBackground
                     )
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(
-                        text = "Перейдите на вкладку Карта и добавьте метки!",
+                        text = context.getString(R.string.list_empty_hint),
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f)
                     )
@@ -141,6 +144,7 @@ private fun MarkerListItem(
     marker: Marker,
     onDelete: () -> Unit
 ) {
+    val context = LocalContext.current
     val type by remember(marker.type) {
         try {
             mutableStateOf(marker.markerType())
@@ -192,7 +196,7 @@ private fun MarkerListItem(
             ) {
                 Icon(
                     Icons.Default.Delete,
-                    contentDescription = "Удалить метку",
+                    contentDescription = context.getString(R.string.list_item_delete),
                     tint = MaterialTheme.colorScheme.tertiary,
                     modifier = Modifier.size(20.dp)
                 )

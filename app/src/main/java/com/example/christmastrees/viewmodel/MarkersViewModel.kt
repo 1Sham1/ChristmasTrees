@@ -1,4 +1,4 @@
-package com.example.christmastrees.viewmodel
+﻿package com.example.christmastrees.viewmodel
 
 import android.Manifest
 import android.content.Context
@@ -7,7 +7,6 @@ import android.location.Location
 import android.location.LocationListener
 import android.location.LocationManager
 import android.os.Bundle
-import androidx.annotation.RequiresPermission
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
@@ -114,7 +113,8 @@ private fun computeCounts(m: List<Marker>): List<IntArray> {
             }
         }
     }
-    // Apply division by 10 to accumulated small quantities (fixes rounding bug)
+    // SMALL markers contribute 1/10 of their quantity to the total count.
+    // This is because small markers represent fractional coverage.
     tTotal += tSmallAcc / 10
     sTotal += sSmallAcc / 10
     dTotal += dSmallAcc / 10
@@ -143,7 +143,7 @@ data class Marker(
     val size: String = MarkerSize.NORMAL.name
 ) {
     fun markerType(): MarkerType = MarkerType.fromString(type)
-    fun markerSize(): MarkerSize = MarkerSize.valueOf(size)
+    fun markerSize(): MarkerSize = MarkerSize.entries.find { it.name == size } ?: MarkerSize.NORMAL
 }
 
 class MarkersViewModel(
@@ -407,7 +407,6 @@ class MarkersViewModel(
         }
     }
 
-    @RequiresPermission(allOf = [Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION])
     fun onPermissionResult(granted: Boolean) {
         uiState = uiState.copy(isLocationPermissionGranted = granted)
         if (granted) {
@@ -415,7 +414,6 @@ class MarkersViewModel(
         }
     }
 
-    @RequiresPermission(allOf = [Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION])
     fun loadCurrentLocation() {
         if (uiState.isLocationPermissionGranted) {
             uiState = uiState.copy(isLoadingLocation = true)
@@ -457,7 +455,6 @@ class MarkersViewModel(
         }
     }
 
-    @RequiresPermission(allOf = [Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION])
     fun requestLocationUpdate() {
         if (uiState.isLocationPermissionGranted) {
             try {
@@ -470,8 +467,10 @@ class MarkersViewModel(
                     }
                     override fun onProviderDisabled(provider: String) {}
                     override fun onProviderEnabled(provider: String) {}
-                    @Deprecated("Deprecated in Java")
-                    override fun onStatusChanged(provider: String, status: Int, extras: Bundle) {}
+                    @Suppress("DEPRECATION")
+                    override fun onStatusChanged(provider: String, status: Int, extras: Bundle) {
+                        // TODO: Migrate from deprecated LocationListener to FusedLocationProviderClient
+                    }
                 }
                 
                 locationManager.requestLocationUpdates(LocationManager.NETWORK_PROVIDER, 0, 0f, locationListener)

@@ -1,4 +1,4 @@
-package com.example.christmastrees.data
+﻿package com.example.christmastrees.data
 
 enum class MarkerType(
     val label: String,
@@ -24,7 +24,10 @@ enum class MarkerType(
     companion object {
         fun fromString(value: String): MarkerType {
             return values().find { it.name == value }
-                ?: CHRISTMAS_TREE
+                ?: run {
+                    android.util.Log.w("MarkerType", "Unknown marker type: '$value', defaulting to CHRISTMAS_TREE")
+                    CHRISTMAS_TREE
+                }
         }
     }
 }

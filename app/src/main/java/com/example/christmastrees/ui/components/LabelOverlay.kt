@@ -1,4 +1,4 @@
-package com.example.christmastrees.ui.components
+﻿package com.example.christmastrees.ui.components
 
 import android.graphics.Canvas
 import android.graphics.Paint
@@ -23,12 +23,13 @@ class LabelOverlay(
         val screenPos = projection.toPixels(point, null) ?: return
 
         // Measure text
-        val textPaint = Paint().apply {
-            textSize = 22f
+        val measurePaint = Paint().apply {
+            textSize = 20f
             isAntiAlias = true
             textAlign = Paint.Align.CENTER
+            typeface = android.graphics.Typeface.create(android.graphics.Typeface.SANS_SERIF, android.graphics.Typeface.BOLD)
         }
-        textPaint.getTextBounds(label, 0, label.length, textBounds)
+        measurePaint.getTextBounds(label, 0, label.length, textBounds)
         val textWidth = textBounds.width()
         val textHeight = textBounds.height()
 
@@ -42,18 +43,24 @@ class LabelOverlay(
         }
         val textY = screenPos.y.toFloat() - labelOffset
 
-        // Draw black text, no background
-        val labelPaint = Paint().apply {
-            textSize = 22f
+        // Draw text with white outline for better contrast
+        val outlinePaint = Paint().apply {
+            textSize = 20f
             isAntiAlias = true
             textAlign = Paint.Align.CENTER
-            color = android.graphics.Color.parseColor("#000000")
+            color = android.graphics.Color.WHITE
+            style = Paint.Style.STROKE
+            strokeWidth = 6f
+            typeface = android.graphics.Typeface.create(android.graphics.Typeface.SANS_SERIF, android.graphics.Typeface.BOLD)
         }
-        canvas.drawText(
-            label,
-            centerX,
-            textY,
-            labelPaint
-        )
+        val textPaint = Paint().apply {
+            textSize = 20f
+            isAntiAlias = true
+            textAlign = Paint.Align.CENTER
+            color = android.graphics.Color.parseColor("#1B5E20")
+            typeface = android.graphics.Typeface.create(android.graphics.Typeface.SANS_SERIF, android.graphics.Typeface.BOLD)
+        }
+        canvas.drawText(label, centerX, textY, outlinePaint)
+        canvas.drawText(label, centerX, textY, textPaint)
     }
 }

@@ -1,4 +1,4 @@
-package com.example.christmastrees.ui.components
+﻿package com.example.christmastrees.ui.components
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
@@ -25,9 +25,11 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.christmastrees.R
 import com.example.christmastrees.ui.theme.ChristmasGold
 import com.example.christmastrees.ui.theme.ChristmasGreen
 
@@ -42,7 +44,8 @@ fun SettingsDialog(
     isSnowEnabled: Boolean,
     onAudioToggle: () -> Unit,
     onSnowToggle: () -> Unit,
-    onClose: () -> Unit
+    onClose: () -> Unit,
+    context: android.content.Context = androidx.compose.ui.platform.LocalContext.current
 ) {
     if (isOpen) {
         Box(
@@ -69,7 +72,7 @@ fun SettingsDialog(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
-                            text = "Настройки",
+                            text = context.getString(R.string.settings_title),
                             fontWeight = FontWeight.Bold,
                             fontSize = 18.sp,
                             color = ChristmasGreen,
@@ -78,7 +81,7 @@ fun SettingsDialog(
                         IconButton(onClick = onClose) {
                             Icon(
                                 imageVector = Icons.Default.Close,
-                                contentDescription = "Закрыть",
+                                contentDescription = context.getString(R.string.settings_close),
                                 tint = ChristmasGreen
                             )
                         }
@@ -94,19 +97,19 @@ fun SettingsDialog(
                     ) {
                         Icon(
                             imageVector = if (isAudioPlaying) Icons.Default.MusicNote else Icons.Default.MusicOff,
-                            contentDescription = if (isAudioPlaying) "Выключить музыку" else "Включить музыку",
+                            contentDescription = if (isAudioPlaying) context.getString(R.string.settings_music_toggle_off) else context.getString(R.string.settings_music_toggle_on),
                             tint = ChristmasGold,
                             modifier = Modifier.padding(end = 12.dp)
                         )
                         Text(
-                            text = if (isAudioPlaying) "Музыка включена" else "Музыка выключена",
+                            text = if (isAudioPlaying) context.getString(R.string.settings_music_on) else context.getString(R.string.settings_music_off),
                             modifier = Modifier.weight(1f),
                             fontSize = 14.sp
                         )
                         IconButton(onClick = onAudioToggle) {
                             Icon(
                                 imageVector = if (isAudioPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
-                                contentDescription = if (isAudioPlaying) "Пауза" else "Воспроизвести",
+                                contentDescription = if (isAudioPlaying) context.getString(R.string.settings_music_play) else context.getString(R.string.settings_music_pause),
                                 tint = ChristmasGold
                             )
                         }
@@ -127,14 +130,14 @@ fun SettingsDialog(
                             modifier = Modifier.padding(end = 12.dp)
                         )
                         Text(
-                            text = if (isSnowEnabled) "Снег включён" else "Снег выключен",
+                            text = if (isSnowEnabled) context.getString(R.string.settings_snow_on) else context.getString(R.string.settings_snow_off),
                             modifier = Modifier.weight(1f),
                             fontSize = 14.sp
                         )
                         IconButton(onClick = onSnowToggle) {
                             Icon(
                                 imageVector = if (isSnowEnabled) Icons.Default.Pause else Icons.Default.PlayArrow,
-                                contentDescription = if (isSnowEnabled) "Остановить снег" else "Запустить снег",
+                                contentDescription = if (isSnowEnabled) context.getString(R.string.settings_snow_toggle_off) else context.getString(R.string.settings_snow_toggle_on),
                                 tint = ChristmasGold
                             )
                         }
