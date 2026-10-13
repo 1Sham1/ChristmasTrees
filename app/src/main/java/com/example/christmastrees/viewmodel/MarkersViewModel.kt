@@ -56,6 +56,11 @@ private fun computeCounts(m: List<Marker>): List<IntArray> {
     var dNormal = 0
     var dBoss = 0
 
+    // Accumulate small quantities separately for correct division
+    var tSmallAcc = 0
+    var sSmallAcc = 0
+    var dSmallAcc = 0
+
     for (marker in m) {
         val mSize = marker.markerSize()
         when (marker.markerType()) {
@@ -63,14 +68,14 @@ private fun computeCounts(m: List<Marker>): List<IntArray> {
                 when (mSize) {
                     MarkerSize.SMALL -> {
                         tSmall += marker.quantity
-                        tTotal += marker.quantity / 10
+                        tSmallAcc += marker.quantity
                     }
                     MarkerSize.NORMAL -> {
                         tNormal += marker.quantity
                         tTotal += marker.quantity
                     }
                     MarkerSize.BOSS -> {
-                        tBoss += marker.quantity
+                        tBoss++
                         tTotal += marker.quantity
                     }
                 }
@@ -79,14 +84,14 @@ private fun computeCounts(m: List<Marker>): List<IntArray> {
                 when (mSize) {
                     MarkerSize.SMALL -> {
                         sSmall += marker.quantity
-                        sTotal += marker.quantity / 10
+                        sSmallAcc += marker.quantity
                     }
                     MarkerSize.NORMAL -> {
                         sNormal += marker.quantity
                         sTotal += marker.quantity
                     }
                     MarkerSize.BOSS -> {
-                        sBoss += marker.quantity
+                        sBoss++
                         sTotal += marker.quantity
                     }
                 }
@@ -95,20 +100,25 @@ private fun computeCounts(m: List<Marker>): List<IntArray> {
                 when (mSize) {
                     MarkerSize.SMALL -> {
                         dSmall += marker.quantity
-                        dTotal += marker.quantity / 10
+                        dSmallAcc += marker.quantity
                     }
                     MarkerSize.NORMAL -> {
                         dNormal += marker.quantity
                         dTotal += marker.quantity
                     }
                     MarkerSize.BOSS -> {
-                        dBoss += marker.quantity
+                        dBoss++
                         dTotal += marker.quantity
                     }
                 }
             }
         }
     }
+    // Apply division by 10 to accumulated small quantities (fixes rounding bug)
+    tTotal += tSmallAcc / 10
+    sTotal += sSmallAcc / 10
+    dTotal += dSmallAcc / 10
+
     return listOf(
         intArrayOf(tTotal, sTotal, dTotal),
         intArrayOf(tSmall, tNormal, tBoss),
