@@ -9,12 +9,14 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.MusicOff
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.Pause
+import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -44,6 +46,7 @@ fun SettingsDialog(
     isSnowEnabled: Boolean,
     onAudioToggle: () -> Unit,
     onSnowToggle: () -> Unit,
+    onProfilesClick: () -> Unit,
     onClose: () -> Unit,
     context: android.content.Context = androidx.compose.ui.platform.LocalContext.current
 ) {
@@ -141,6 +144,29 @@ fun SettingsDialog(
                                 tint = ChristmasGold
                             )
                         }
+                    }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    // Профили
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { onProfilesClick() }
+                            .padding(vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Person,
+                            contentDescription = "Профили",
+                            tint = ChristmasGold,
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Text(
+                            text = "Профили",
+                            modifier = Modifier.padding(start = 12.dp),
+                            fontSize = 14.sp
+                        )
                     }
                 }
             }

@@ -22,13 +22,20 @@ import androidx.compose.ui.Alignment
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import android.app.Activity
+import android.content.Intent
+import android.content.Context
 import androidx.compose.ui.unit.dp
 import androidx.compose.runtime.setValue
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.TextButton
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
@@ -38,12 +45,15 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import com.example.christmastrees.util.AudioManager
 import com.example.christmastrees.util.LocalAudioManager
+import com.example.christmastrees.util.ProfileManager
 import com.example.christmastrees.util.SettingsManager
 import com.example.christmastrees.viewmodel.MarkersViewModel
 import com.example.christmastrees.ui.components.GarlandOverlay
+import com.example.christmastrees.ui.components.ProfileManagementScreen
 import com.example.christmastrees.ui.components.SettingsDialog
 import com.example.christmastrees.ui.screens.ListScreen
 import com.example.christmastrees.ui.screens.MapScreen
+import com.example.christmastrees.MainActivity
 
 sealed class Screen(val route: String, val label: String, val icon: String) {
     object Map : Screen("map", "Карта", "🗺️")
@@ -58,179 +68,280 @@ val LocalShowSettingsDialog = compositionLocalOf { false }
 fun AppNavigation(
     navController: NavHostController = androidx.navigation.compose.rememberNavController()
 ) {
-    val viewModel = MarkersViewModel.LocalMarkersViewModel.current ?: throw IllegalStateException("MarkersViewModel not provided")
-    val audioManager = LocalAudioManager.current
+    val context = LocalContext.current
+    val appCtx = context.applicationContext
     val lifecycleOwner = LocalLifecycleOwner.current
+    val viewModel = MarkersViewModel.LocalMarkersViewModel.current ?: throw IllegalStateException("MarkersViewModel not provided")
 
     var selectedScreen: Screen by remember { mutableStateOf(Screen.Map) }
     var showSettingsDialog by remember { mutableStateOf(false) }
     var showMarkerPicker by remember { mutableStateOf(false) }
+    var showProfileManagement by remember { mutableStateOf(false) }
+
+    // Profile management state
+    var profileNames by remember { mutableStateOf<List<String>>(emptyList()) }
+    var activeProfileName by remember { mutableStateOf("") }
+    var showProfileSwitchDialog by remember { mutableStateOf(false) }
+    var profileToSwitchTo by remember { mutableStateOf("") }
+
+    // Load profiles on composition
+    LaunchedEffect(Unit) {
+        profileNames = ProfileManager.getProfileNames(appCtx)
+        activeProfileName = ProfileManager.getActiveProfile(appCtx)
+    }
+
+    // Reload profiles when profile management screen is shown
+    LaunchedEffect(showProfileManagement) {
+        if (showProfileManagement) {
+            profileNames = ProfileManager.getProfileNames(appCtx)
+            activeProfileName = ProfileManager.getActiveProfile(appCtx)
+        }
+    }
 
     CompositionLocalProvider(
         LocalShowSettingsDialog provides showSettingsDialog
     ) {
         val navBackStackEntry by navController.currentBackStackEntryAsState()
-    val currentRoute = navBackStackEntry?.destination?.route
+        val currentRoute = navBackStackEntry?.destination?.route
 
-    when {
-        currentRoute?.startsWith(Screen.Map.route) == true -> selectedScreen = Screen.Map
-        currentRoute?.startsWith(Screen.List.route) == true -> selectedScreen = Screen.List
-    }
-
-    // Ensure audioManager is not null
-    val safeAudioManager = audioManager
-        ?: throw IllegalStateException("AudioManager not initialized. Check MainApplication.")
-
-    // Load music state from settings on startup
-    var isAudioPlaying by remember { mutableStateOf(SettingsManager.isMusicEnabled(safeAudioManager.appContext)) }
-
-    // Sync music state on app resume
-    DisposableEffect(audioManager, lifecycleOwner) {
-        val observer = LifecycleEventObserver { _, event ->
-            if (event == Lifecycle.Event.ON_RESUME) {
-                isAudioPlaying = safeAudioManager.isPlaying
-            }
+        when {
+            currentRoute?.startsWith(Screen.Map.route) == true -> selectedScreen = Screen.Map
+            currentRoute?.startsWith(Screen.List.route) == true -> selectedScreen = Screen.List
         }
-        lifecycleOwner.lifecycle.addObserver(observer)
-        onDispose {
-            lifecycleOwner.lifecycle.removeObserver(observer)
-        }
-    }
 
-    // Read UI state values
-    val isSnowEnabled by viewModel.uiState::isSnowEnabled
+        val audioManager = LocalAudioManager.current
 
-    Column(modifier = Modifier.fillMaxSize()) {
-        NavHost(
-            modifier = Modifier.weight(1f),
-            navController = navController,
-            startDestination = Screen.Map.route
-        ) {
-            composable(Screen.Map.route) {
-                MapScreen(
-                    viewModel = viewModel,
-                    showPicker = showMarkerPicker,
-                    onPickerStateChanged = { showMarkerPicker = it }
-                )
+        // Ensure audioManager is not null
+        val safeAudioManager = audioManager
+            ?: throw IllegalStateException("AudioManager not initialized. Check MainApplication.")
+
+        // Load music state from settings on startup
+        var isAudioPlaying by remember { mutableStateOf(SettingsManager.isMusicEnabled(safeAudioManager.appContext, activeProfileName)) }
+
+        // Sync music state on app resume
+        DisposableEffect(audioManager, lifecycleOwner, activeProfileName) {
+            val observer = LifecycleEventObserver { _, event ->
+                if (event == Lifecycle.Event.ON_RESUME) {
+                    isAudioPlaying = safeAudioManager.isPlaying
+                    // Reload music state from the active profile
+                    isAudioPlaying = SettingsManager.isMusicEnabled(safeAudioManager.appContext, activeProfileName)
+                }
             }
-            composable(Screen.List.route) {
-                ListScreen(viewModel = viewModel)
+            lifecycleOwner.lifecycle.addObserver(observer)
+            onDispose {
+                lifecycleOwner.lifecycle.removeObserver(observer)
             }
         }
 
-        // Settings Dialog
-        SettingsDialog(
-            isOpen = showSettingsDialog,
-            isAudioPlaying = isAudioPlaying,
-            isSnowEnabled = isSnowEnabled,
-            onAudioToggle = {
-                safeAudioManager.toggle()
-                isAudioPlaying = safeAudioManager.isPlaying
-            },
-            onSnowToggle = { viewModel.toggleSnow() },
-            onClose = { showSettingsDialog = false }
-        )
+        // Read UI state values
+        val isSnowEnabled by viewModel.uiState::isSnowEnabled
 
-        // Navigation bar with 3 buttons and garland overlay
-        Box {
-            NavigationBar(
-                containerColor = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.padding(top = 4.dp)
+        Column(modifier = Modifier.fillMaxSize()) {
+            NavHost(
+                modifier = Modifier.weight(1f),
+                navController = navController,
+                startDestination = Screen.Map.route
             ) {
-                NavigationBarItem(
-                    icon = {
-                        Icon(
-                            imageVector = Icons.Default.Settings,
-                            contentDescription = "Настройки",
-                            tint = MaterialTheme.colorScheme.secondary
-                        )
-                    },
-                    label = {
-                        Text(
-                            "Настройки",
-                            style = MaterialTheme.typography.labelSmall
-                        )
-                    },
-                    selected = false,
-                    onClick = { showSettingsDialog = true },
-                    colors = NavigationBarItemDefaults.colors(
-                        selectedIconColor = MaterialTheme.colorScheme.secondary,
-                        unselectedIconColor = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.7f),
-                        selectedTextColor = MaterialTheme.colorScheme.secondary,
-                        unselectedTextColor = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.7f),
-                        indicatorColor = MaterialTheme.colorScheme.primary
+                composable(Screen.Map.route) {
+                    MapScreen(
+                        viewModel = viewModel,
+                        showPicker = showMarkerPicker,
+                        onPickerStateChanged = { showMarkerPicker = it }
                     )
-                )
+                }
+                composable(Screen.List.route) {
+                    ListScreen(viewModel = viewModel)
+                }
+            }
 
-                // Add marker button
-                NavigationBarItem(
-                    icon = {
-                        Icon(
-                            imageVector = Icons.Default.Add,
-                            contentDescription = "Добавить маркер",
-                            tint = MaterialTheme.colorScheme.secondary
-                        )
+            // Profile Management Screen (full screen overlay)
+            if (showProfileManagement) {
+                ProfileManagementScreen(
+                    profileNames = profileNames,
+                    activeProfileName = activeProfileName,
+                    onCreateProfile = { name ->
+                        if (ProfileManager.createProfile(appCtx, name)) {
+                            profileNames = ProfileManager.getProfileNames(appCtx)
+                        }
                     },
-                    label = {
-                        Text(
-                            "Добавить маркер",
-                            style = MaterialTheme.typography.labelSmall
-                        )
+                    onDeleteProfile = { name ->
+                        if (ProfileManager.deleteProfile(appCtx, name)) {
+                            profileNames = ProfileManager.getProfileNames(appCtx)
+                            activeProfileName = ProfileManager.getActiveProfile(appCtx)
+                        }
                     },
-                    selected = false,
-                    onClick = { showMarkerPicker = true },
-                    colors = NavigationBarItemDefaults.colors(
-                        selectedIconColor = MaterialTheme.colorScheme.secondary,
-                        unselectedIconColor = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.7f),
-                        selectedTextColor = MaterialTheme.colorScheme.secondary,
-                        unselectedTextColor = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.7f),
-                        indicatorColor = MaterialTheme.colorScheme.primary
-                    )
-                )
-
-                // Search owner button
-                NavigationBarItem(
-                    icon = {
-                        Icon(
-                            imageVector = Icons.Default.Search,
-                            contentDescription = "Поиск владельца",
-                            tint = MaterialTheme.colorScheme.secondary
-                        )
+                    onRenameProfile = { oldName, newName ->
+                        if (ProfileManager.renameProfile(appCtx, oldName, newName)) {
+                            profileNames = ProfileManager.getProfileNames(appCtx)
+                            activeProfileName = ProfileManager.getActiveProfile(appCtx)
+                            // If we renamed the active profile, update it
+                            if (activeProfileName == newName) {
+                                // profileName in MainActivity is already updated via onProfileSwitch
+                            }
+                        }
                     },
-                    label = {
-                        Text(
-                            "Поиск владельца",
-                            style = MaterialTheme.typography.labelSmall
-                        )
+                    onSwitchProfile = { name ->
+                        if (name != activeProfileName) {
+                            profileToSwitchTo = name
+                            showProfileSwitchDialog = true
+                        }
                     },
-                    selected = false,
-                    onClick = {
-                        viewModel.requestLocationUpdate()
-                        viewModel.centerOnCurrentLocation()
-                        viewModel.toggleOwnerSearchHint()
-                    },
-                    colors = NavigationBarItemDefaults.colors(
-                        selectedIconColor = MaterialTheme.colorScheme.secondary,
-                        unselectedIconColor = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.7f),
-                        selectedTextColor = MaterialTheme.colorScheme.secondary,
-                        unselectedTextColor = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.7f),
-                        indicatorColor = MaterialTheme.colorScheme.primary
-                    )
+                    onBack = { showProfileManagement = false }
                 )
             }
 
-            // Garland overlay on top of navigation bar
-            GarlandOverlay(
-                modifier = Modifier
-                    .align(Alignment.TopCenter)
-                    .fillMaxWidth()
-                    .height(35.dp),
-                bulbCount = 10,
-                sagRatio = 0.02f
+            // Profile Switch Confirmation Dialog
+            if (showProfileSwitchDialog) {
+                AlertDialog(
+                    onDismissRequest = {
+                        showProfileSwitchDialog = false
+                        profileToSwitchTo = ""
+                    },
+                    title = { Text("Смена профиля") },
+                    text = { Text("Для переключения на профиль \"$profileToSwitchTo\" необходимо перезагрузить приложение. Продолжить?") },
+                    confirmButton = {
+                        TextButton(onClick = {
+                            // Set the new active profile
+                            ProfileManager.setActiveProfile(appCtx, profileToSwitchTo)
+                            showProfileSwitchDialog = false
+                            profileToSwitchTo = ""
+                            // Restart activity with new profile
+                            val activity = context as? Activity
+                            if (activity != null) {
+                                val intent = Intent(context, MainActivity::class.java).apply {
+                                    flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+                                }
+                                context.startActivity(intent)
+                            }
+                        }) {
+                            Text("Перезагрузить")
+                        }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = {
+                            showProfileSwitchDialog = false
+                            profileToSwitchTo = ""
+                        }) {
+                            Text("Отмена")
+                        }
+                    }
+                )
+            }
+
+            // Settings Dialog
+            SettingsDialog(
+                isOpen = showSettingsDialog && !showProfileManagement,
+                isAudioPlaying = isAudioPlaying,
+                isSnowEnabled = isSnowEnabled,
+                onAudioToggle = {
+                    safeAudioManager.toggle()
+                    isAudioPlaying = safeAudioManager.isPlaying
+                    SettingsManager.saveMusicEnabled(safeAudioManager.appContext, isAudioPlaying, activeProfileName)
+                },
+                onSnowToggle = { viewModel.toggleSnow() },
+                onProfilesClick = { showProfileManagement = true },
+                onClose = { showSettingsDialog = false }
             )
+
+            // Navigation bar with 3 buttons and garland overlay
+            Box {
+                NavigationBar(
+                    containerColor = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.padding(top = 4.dp)
+                ) {
+                    NavigationBarItem(
+                        icon = {
+                            Icon(
+                                imageVector = Icons.Default.Settings,
+                                contentDescription = "Настройки",
+                                tint = MaterialTheme.colorScheme.secondary
+                            )
+                        },
+                        label = {
+                            Text(
+                                "Настройки",
+                                style = MaterialTheme.typography.labelSmall
+                            )
+                        },
+                        selected = false,
+                        onClick = { showSettingsDialog = true },
+                        colors = NavigationBarItemDefaults.colors(
+                            selectedIconColor = MaterialTheme.colorScheme.secondary,
+                            unselectedIconColor = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.7f),
+                            selectedTextColor = MaterialTheme.colorScheme.secondary,
+                            unselectedTextColor = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.7f),
+                            indicatorColor = MaterialTheme.colorScheme.primary
+                        )
+                    )
+
+                    // Add marker button
+                    NavigationBarItem(
+                        icon = {
+                            Icon(
+                                imageVector = Icons.Default.Add,
+                                contentDescription = "Добавить маркер",
+                                tint = MaterialTheme.colorScheme.secondary
+                            )
+                        },
+                        label = {
+                            Text(
+                                "Добавить маркер",
+                                style = MaterialTheme.typography.labelSmall
+                            )
+                        },
+                        selected = false,
+                        onClick = { showMarkerPicker = true },
+                        colors = NavigationBarItemDefaults.colors(
+                            selectedIconColor = MaterialTheme.colorScheme.secondary,
+                            unselectedIconColor = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.7f),
+                            selectedTextColor = MaterialTheme.colorScheme.secondary,
+                            unselectedTextColor = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.7f),
+                            indicatorColor = MaterialTheme.colorScheme.primary
+                        )
+                    )
+
+                    // Search owner button
+                    NavigationBarItem(
+                        icon = {
+                            Icon(
+                                imageVector = Icons.Default.Search,
+                                contentDescription = "Поиск владельца",
+                                tint = MaterialTheme.colorScheme.secondary
+                            )
+                        },
+                        label = {
+                            Text(
+                                "Поиск владельца",
+                                style = MaterialTheme.typography.labelSmall
+                            )
+                        },
+                        selected = false,
+                        onClick = {
+                            viewModel.requestLocationUpdate()
+                            viewModel.centerOnCurrentLocation()
+                            viewModel.toggleOwnerSearchHint()
+                        },
+                        colors = NavigationBarItemDefaults.colors(
+                            selectedIconColor = MaterialTheme.colorScheme.secondary,
+                            unselectedIconColor = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.7f),
+                            selectedTextColor = MaterialTheme.colorScheme.secondary,
+                            unselectedTextColor = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.7f),
+                            indicatorColor = MaterialTheme.colorScheme.primary
+                        )
+                    )
+                }
+
+                // Garland overlay on top of navigation bar
+                GarlandOverlay(
+                    modifier = Modifier
+                        .align(Alignment.TopCenter)
+                        .fillMaxWidth()
+                        .height(35.dp),
+                    bulbCount = 10,
+                    sagRatio = 0.02f
+                )
+            }
         }
-    }
     }
 }
-
 

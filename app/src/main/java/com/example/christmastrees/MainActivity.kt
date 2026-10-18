@@ -15,6 +15,7 @@ import com.example.christmastrees.ui.navigation.AppNavigation
 import com.example.christmastrees.ui.theme.ChristmasTreesTheme
 import com.example.christmastrees.util.AudioManager
 import com.example.christmastrees.util.LocalAudioManager
+import com.example.christmastrees.util.ProfileManager
 import com.example.christmastrees.viewmodel.MarkersViewModel
 
 class MainActivity : ComponentActivity() {
@@ -37,10 +38,18 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable
-fun ChristmasTreesApp(
-    viewModel: MarkersViewModel = viewModel(factory = MarkersViewModel.Factory(LocalContext.current.applicationContext))
-) {
+fun ChristmasTreesApp() {
+    val context = LocalContext.current
+    val appCtx = context.applicationContext
+    val profileName = ProfileManager.getActiveProfile(appCtx)
+
+    // Ensure AudioManager is initialized (recovery after activity recreation)
+    AudioManager.init(appCtx)
+
     val audioManager = AudioManager.get()
+    val viewModel: MarkersViewModel = viewModel(
+        factory = MarkersViewModel.Factory(appCtx, profileName)
+    )
 
     CompositionLocalProvider(
         LocalAudioManager provides audioManager,

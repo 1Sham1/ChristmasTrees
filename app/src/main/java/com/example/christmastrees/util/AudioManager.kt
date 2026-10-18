@@ -3,6 +3,7 @@
 import android.media.MediaPlayer
 import androidx.compose.runtime.compositionLocalOf
 import com.example.christmastrees.R
+import com.example.christmastrees.util.ProfileManager
 
 class AudioManager private constructor(private val context: android.content.Context) {
     val appContext: android.content.Context
@@ -32,7 +33,8 @@ class AudioManager private constructor(private val context: android.content.Cont
                 android.util.Log.d("AudioManager", "MediaPlayer created successfully, resource=$resourceId")
 
                 // Restore music state from settings
-                if (SettingsManager.isMusicEnabled(context)) {
+                val activeProfile = ProfileManager.getActiveProfile(context)
+                if (SettingsManager.isMusicEnabled(context, activeProfile)) {
                     _isPlaying = true
                     mp.seekTo(0)
                     mp.start()
@@ -54,7 +56,8 @@ class AudioManager private constructor(private val context: android.content.Cont
                     mp.seekTo(0)
                     mp.start()
                     _isPlaying = true
-                    SettingsManager.saveMusicEnabled(appContext, true)
+                    val activeProfile = ProfileManager.getActiveProfile(appContext)
+                    SettingsManager.saveMusicEnabled(appContext, true, activeProfile)
                     android.util.Log.d("AudioManager", "Started playing")
                 } catch (e: Exception) {
                     android.util.Log.e("AudioManager", "Failed to start playback", e)
@@ -73,7 +76,8 @@ class AudioManager private constructor(private val context: android.content.Cont
             try {
                 mp.pause()
                 _isPlaying = false
-                SettingsManager.saveMusicEnabled(appContext, false)
+                val activeProfile = ProfileManager.getActiveProfile(appContext)
+                SettingsManager.saveMusicEnabled(appContext, false, activeProfile)
                 android.util.Log.d("AudioManager", "Paused playing")
             } catch (e: Exception) {
                 android.util.Log.e("AudioManager", "Failed to pause playback", e)

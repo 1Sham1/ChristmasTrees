@@ -49,6 +49,7 @@ import com.example.christmastrees.ui.components.LabelOverlay
 import com.example.christmastrees.ui.components.MarkerPickerBottomSheet
 import com.example.christmastrees.ui.components.SnowfallOverlay
 import com.example.christmastrees.ui.navigation.LocalShowSettingsDialog
+import com.example.christmastrees.util.ProfileManager
 import com.example.christmastrees.viewmodel.MarkersViewModel
 import org.osmdroid.tileprovider.tilesource.TileSourceFactory
 import org.osmdroid.util.GeoPoint
@@ -66,23 +67,27 @@ fun MapScreen(
     val uiState = viewModel.uiState
     val markers = viewModel.markers
     var selectedMarkerId by remember { mutableStateOf<Long?>(null) }
-    val mapReady = remember { mutableStateOf(false) }
-    val userLocation = remember { mutableStateOf<GeoPoint?>(null) }
-    var userMarker by remember { mutableStateOf<OsmdroidMarker?>(null) }
-    val mapViewRef = remember { mutableStateOf<MapView?>(null) }
-    val prefs = context.getSharedPreferences("map_settings", android.content.Context.MODE_PRIVATE)
     var showContextMenu by remember { mutableStateOf(false) }
     var contextMenuMarkerName by remember { mutableStateOf("") }
     var contextMenuMarkerQuantity by remember { mutableStateOf("") }
     var contextMenuOpenedMarkerId by remember { mutableStateOf<Long?>(null) }
     var contextMenuMarkerSize by remember { mutableStateOf(MarkerSize.NORMAL) }
+    
+    val mapReady = remember { mutableStateOf(false) }
+    val userLocation = remember { mutableStateOf<GeoPoint?>(null) }
+    var userMarker by remember { mutableStateOf<OsmdroidMarker?>(null) }
+    val mapViewRef = remember { mutableStateOf<MapView?>(null) }
+    var activeProfile by remember { mutableStateOf(ProfileManager.getActiveProfile(context.applicationContext)) }
+    var prefs by remember { mutableStateOf(context.getSharedPreferences("map_settings_$activeProfile", android.content.Context.MODE_PRIVATE)) }
     var showSizeDropdown by remember { mutableStateOf(false) }
     var labeledMarkerIds by remember { mutableStateOf<Set<Long>>(emptySet()) }
     var labelOverlays by remember { mutableStateOf<List<LabelOverlay>>(emptyList()) }
     
     // Load saved labeled marker ids
     LaunchedEffect(Unit) {
-        val saved = prefs.getString("labeled_marker_ids", null)
+        val activeProfile = ProfileManager.getActiveProfile(context.applicationContext)
+        val profilePrefs = context.getSharedPreferences("map_settings_$activeProfile", android.content.Context.MODE_PRIVATE)
+        val saved = profilePrefs.getString("labeled_marker_ids", null)
         if (saved != null) {
             labeledMarkerIds = saved.split(",").filter { it.isNotBlank() }.mapNotNull { it.toLongOrNull() }.toSet()
         }
@@ -90,7 +95,9 @@ fun MapScreen(
     
     // Save labeled marker ids when changed
     LaunchedEffect(labeledMarkerIds) {
-        prefs.edit().putString("labeled_marker_ids", labeledMarkerIds.joinToString(",")).apply()
+        val activeProfile = ProfileManager.getActiveProfile(context.applicationContext)
+        val profilePrefs = context.getSharedPreferences("map_settings_$activeProfile", android.content.Context.MODE_PRIVATE)
+        profilePrefs.edit().putString("labeled_marker_ids", labeledMarkerIds.joinToString(",")).apply()
     }
     
     // Observe settings dialog state and close context menu when opened
@@ -100,6 +107,68 @@ fun MapScreen(
         if (showSettings && showContextMenu) {
             showContextMenu = false
             contextMenuOpenedMarkerId = null
+        }
+    }
+    
+    // Clean up labeledMarkerIds when markers are deleted
+    LaunchedEffect(markers) {
+        val markerIds = markers.map { it.id }.toSet()
+        labeledMarkerIds = labeledMarkerIds.filter { it in markerIds }.toSet()
+    }
+
+    // Reactive marker updates on map
+    LaunchedEffect(markers, labeledMarkerIds) {
+        val mapView = mapViewRef.value ?: return@LaunchedEffect
+        Handler(Looper.getMainLooper()).post {
+            try {
+                // Remove all custom markers (keep user location marker)
+                val markersToRemove = mutableListOf<OsmdroidMarker>()
+                for (overlay in mapView.overlays) {
+                    if (overlay is OsmdroidMarker && overlay.title != null && overlay.title != "Вы здесь") {
+                        markersToRemove.add(overlay)
+                    }
+                }
+                mapView.overlays.removeAll(markersToRemove)
+
+                // Remove old label overlays
+                val labelOverlaysToRemove = mutableListOf<LabelOverlay>()
+                for (overlay in mapView.overlays) {
+                    if (overlay is LabelOverlay) {
+                        labelOverlaysToRemove.add(overlay)
+                    }
+                }
+                mapView.overlays.removeAll(labelOverlaysToRemove)
+
+                // Re-add all markers from ViewModel state
+                val newLabelOverlays = mutableListOf<LabelOverlay>()
+                for (marker in markers) {
+                    val type = marker.markerType()
+                    val latLng = GeoPoint(marker.latitude, marker.longitude)
+
+                    val markerSize = marker.markerSize()
+                    val bitmap = createEmojiMarkerBitmap(type.emoji, marker.quantity, markerSize)
+                    val markerIcon = BitmapDrawable(mapView.resources, bitmap)
+                    val osmdroidMarker = OsmdroidMarker(mapView).apply {
+                        position = latLng
+                        setIcon(markerIcon)
+                        setAnchor(OsmdroidMarker.ANCHOR_CENTER, OsmdroidMarker.ANCHOR_BOTTOM)
+                        title = marker.id.toString()
+                        setOnMarkerClickListener { _, _ -> false }
+                    }
+                    mapView.overlays.add(osmdroidMarker)
+
+                    if (marker.id in labeledMarkerIds) {
+                        val labelOverlay = LabelOverlay(latLng, marker.name, marker.quantity, markerSize)
+                        newLabelOverlays.add(labelOverlay)
+                        mapView.overlays.add(labelOverlay)
+                    }
+                }
+
+                labelOverlays = newLabelOverlays
+                mapView.invalidate()
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
         }
     }
     
@@ -131,64 +200,6 @@ fun MapScreen(
             mapViewRef.value?.controller?.setCenter(geoPoint)
             mapViewRef.value?.controller?.setZoom(16.0)
             viewModel.uiState = viewModel.uiState.copy(centerOnLocation = false)
-        }
-    }
-    
-    // Reactive marker updates on map
-    LaunchedEffect(markers, labeledMarkerIds) {
-        val mapView = mapViewRef.value ?: return@LaunchedEffect
-        Handler(Looper.getMainLooper()).post {
-            try {
-                // Remove all custom markers (keep user location marker)
-                val markersToRemove = mutableListOf<OsmdroidMarker>()
-                for (overlay in mapView.overlays) {
-                    if (overlay is OsmdroidMarker && overlay.title != null && overlay.title != "Вы здесь") {
-                        markersToRemove.add(overlay)
-                    }
-                }
-                mapView.overlays.removeAll(markersToRemove)
-                
-                // Remove old label overlays
-                val labelOverlaysToRemove = mutableListOf<LabelOverlay>()
-                for (overlay in mapView.overlays) {
-                    if (overlay is LabelOverlay) {
-                        labelOverlaysToRemove.add(overlay)
-                    }
-                }
-                mapView.overlays.removeAll(labelOverlaysToRemove)
-                
-                // Re-add all markers from ViewModel state
-                val newLabelOverlays = mutableListOf<LabelOverlay>()
-                for (marker in markers) {
-                    val type = marker.markerType()
-                    val latLng = GeoPoint(marker.latitude, marker.longitude)
-                    
-                    // Always draw OsmdroidMarker for hitbox and visual
-                    val markerSize = marker.markerSize()
-                    val bitmap = createEmojiMarkerBitmap(type.emoji, marker.quantity, markerSize)
-                    val markerIcon = BitmapDrawable(mapView.resources, bitmap)
-                    val osmdroidMarker = OsmdroidMarker(mapView).apply {
-                        position = latLng
-                        setIcon(markerIcon)
-                        setAnchor(OsmdroidMarker.ANCHOR_CENTER, OsmdroidMarker.ANCHOR_BOTTOM)
-                        title = marker.id.toString()
-                        setOnMarkerClickListener { clickedMarker, _ -> false }
-                    }
-                    mapView.overlays.add(osmdroidMarker)
-                    
-                    // Additionally add LabelOverlay on top if this marker has labels enabled
-                    if (marker.id in labeledMarkerIds) {
-                        val labelOverlay = LabelOverlay(latLng, marker.name, marker.quantity, markerSize)
-                        newLabelOverlays.add(labelOverlay)
-                        mapView.overlays.add(labelOverlay)
-                    }
-                }
-                
-                labelOverlays = newLabelOverlays
-                mapView.invalidate()
-            } catch (e: Exception) {
-                e.printStackTrace()
-            }
         }
     }
 
@@ -259,9 +270,11 @@ fun MapScreen(
                     )
                     
                     // Load saved position or default to Moscow
-                    val savedLat = prefs.getFloat("lat", 55.7558f)
-                    val savedLon = prefs.getFloat("lon", 37.6173f)
-                    val savedZoom = prefs.getFloat("zoom", 12f)
+                    val activeProfile = ProfileManager.getActiveProfile(context.applicationContext)
+                    val profilePrefs = context.getSharedPreferences("map_settings_$activeProfile", android.content.Context.MODE_PRIVATE)
+                    val savedLat = profilePrefs.getFloat("lat", 55.7558f)
+                    val savedLon = profilePrefs.getFloat("lon", 37.6173f)
+                    val savedZoom = profilePrefs.getFloat("zoom", 12f)
                     
                     // Set initial position
                     mapView.controller.setZoom(savedZoom.toDouble())
@@ -292,7 +305,9 @@ fun MapScreen(
                         }
                     )
                     fun saveMapPosition(mv: MapView) {
-                        prefs.edit().apply {
+                        val activeProfile = ProfileManager.getActiveProfile(context.applicationContext)
+                        val profilePrefs = context.getSharedPreferences("map_settings_$activeProfile", android.content.Context.MODE_PRIVATE)
+                        profilePrefs.edit().apply {
                             putFloat("lat", mv.mapCenter.latitude.toFloat())
                             putFloat("lon", mv.mapCenter.longitude.toFloat())
                             putFloat("zoom", mv.zoomLevelDouble.toFloat())
@@ -422,9 +437,11 @@ fun MapScreen(
                                                             // Hitbox scales with zoom and marker size
                                                             val hitboxRadius = (60f * (10f / mapView.zoomLevel)) * hitboxScale
                                                             if (distance < hitboxRadius) {
-                                                                selectedMarkerId = marker.title.toLongOrNull()
+                                                                val markerId = marker.title.toLongOrNull()
+                                                                android.util.Log.d("MapScreen", "Tapped marker: ${marker.position}, id: $markerId")
+                                                                selectedMarkerId = markerId
                                                                 showContextMenu = true
-                                                                contextMenuOpenedMarkerId = marker.title.toLongOrNull()
+                                                                contextMenuOpenedMarkerId = markerId
                                                                 viewModel.refreshUiState()
                                                                 break
                                                             }
@@ -504,13 +521,17 @@ fun MapScreen(
         }
 
         // Context menu for marker
-        LaunchedEffect(showContextMenu, selectedMarkerId) {
+        LaunchedEffect(showContextMenu, selectedMarkerId, markers) {
             if (showContextMenu && selectedMarkerId != null) {
+                android.util.Log.d("MapScreen", "Opening context menu for marker: $selectedMarkerId, markers count: ${markers.size}")
                 val marker = markers.find { it.id == selectedMarkerId }
                 if (marker != null) {
+                    android.util.Log.d("MapScreen", "Found marker: ${marker.name}, quantity: ${marker.quantity}")
                     contextMenuMarkerName = marker.name
                     contextMenuMarkerQuantity = marker.quantity.toString()
                     contextMenuMarkerSize = marker.markerSize()
+                } else {
+                    android.util.Log.w("MapScreen", "Marker not found: $selectedMarkerId")
                 }
             }
         }

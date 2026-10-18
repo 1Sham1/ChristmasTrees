@@ -147,7 +147,8 @@ data class Marker(
 }
 
 class MarkersViewModel(
-    private val context: Context
+    private val context: Context,
+    private val profileName: String
 ) : ViewModel() {
 
     var markers by mutableStateOf<List<Marker>>(emptyList())
@@ -159,6 +160,7 @@ class MarkersViewModel(
     private var nextId = 1L
     var onMarkerAdded: ((Marker) -> Unit)? = null
     var onMarkersLoaded: ((Int) -> Unit)? = null
+    var onMarkerDeleted: ((Long) -> Unit)? = null
 
     init {
         try {
@@ -175,24 +177,20 @@ class MarkersViewModel(
     private fun loadMarkersFromStorage() {
         try {
             val appCtx = context.applicationContext
-            val prefs = appCtx.getSharedPreferences("markers_data", android.content.Context.MODE_PRIVATE)
+            val prefs = appCtx.getSharedPreferences("markers_data_$profileName", android.content.Context.MODE_PRIVATE)
             
-            val markerCount = prefs.getInt("marker_count", 0)
-            android.util.Log.d("MarkersViewModel", "loadMarkersFromStorage: markerCount=$markerCount")
+            val json = prefs.getString("markers_json", null)
+            android.util.Log.d("MarkersViewModel", "loadMarkersFromStorage: json=$json")
             
             val markerList = mutableListOf<Marker>()
             
-            for (i in 0 until markerCount) {
-                val id = prefs.getLong("marker_$i.id", -1)
-                val lat = java.lang.Double.longBitsToDouble(prefs.getLong("marker_$i.lat", java.lang.Double.doubleToLongBits(0.0)))
-                val lon = java.lang.Double.longBitsToDouble(prefs.getLong("marker_$i.lon", java.lang.Double.doubleToLongBits(0.0)))
-                val type = prefs.getString("marker_$i.type", null) ?: "CHRISTMAS_TREE"
-                val name = prefs.getString("marker_$i.name", null) ?: MarkerType.fromString(type).label
-                val timestamp = prefs.getLong("marker_$i.timestamp", 0L)
-                val quantity = prefs.getInt("marker_$i.quantity", 1)
-                val sizeName = prefs.getString("marker_$i.size", null) ?: MarkerSize.NORMAL.name
-                
-                markerList.add(Marker(id, lat, lon, type, name, timestamp, quantity, sizeName))
+            if (!json.isNullOrEmpty()) {
+                val gson = com.google.gson.Gson()
+                val markerType = object : com.google.gson.reflect.TypeToken<List<Marker>>() {}.type
+                val loaded: List<Marker>? = gson.fromJson(json, markerType)
+                if (loaded != null) {
+                    markerList.addAll(loaded)
+                }
             }
             
             if (markerList.isNotEmpty()) {
@@ -244,11 +242,11 @@ class MarkersViewModel(
     fun toggleSnow() {
         val newState = !uiState.isSnowEnabled
         uiState = uiState.copy(isSnowEnabled = newState)
-        SettingsManager.saveSnowEnabled(context, newState)
+        SettingsManager.saveSnowEnabled(context, newState, profileName)
     }
 
     private fun loadSnowState(): Boolean {
-        return SettingsManager.isSnowEnabled(context)
+        return SettingsManager.isSnowEnabled(context, profileName)
     }
 
     fun toggleOwnerSearchHint() {
@@ -262,24 +260,14 @@ class MarkersViewModel(
     private fun saveMarkers() {
         try {
             val appCtx = context.applicationContext
-            val prefs = appCtx.getSharedPreferences("markers_data", android.content.Context.MODE_PRIVATE)
+            val prefs = appCtx.getSharedPreferences("markers_data_$profileName", android.content.Context.MODE_PRIVATE)
             
-            val editor = prefs.edit()
-            editor.putInt("marker_count", markers.size)
+            val gson = com.google.gson.Gson()
+            val json = gson.toJson(markers)
             
-            markers.forEachIndexed { index, marker ->
-                editor.putLong("marker_$index.id", marker.id)
-                editor.putLong("marker_$index.lat", java.lang.Double.doubleToLongBits(marker.latitude))
-                editor.putLong("marker_$index.lon", java.lang.Double.doubleToLongBits(marker.longitude))
-                editor.putString("marker_$index.type", marker.type)
-                editor.putString("marker_$index.name", marker.name)
-                editor.putLong("marker_$index.timestamp", marker.timestamp)
-                editor.putInt("marker_$index.quantity", marker.quantity)
-                editor.putString("marker_$index.size", marker.size)
-            }
-            editor.apply()
+            prefs.edit().putString("markers_json", json).commit()
             
-            android.util.Log.d("MarkersViewModel", "Saved ${markers.size} markers to storage")
+            android.util.Log.d("MarkersViewModel", "Saved ${markers.size} markers to storage: $json")
         } catch (e: Exception) {
             android.util.Log.e("MarkersViewModel", "Failed to save markers", e)
         }
@@ -310,9 +298,13 @@ class MarkersViewModel(
     }
 
     fun deleteMarker(marker: Marker) {
+        val removedId = marker.id
         markers = markers.filter { it.id != marker.id }
         syncUiState()
         saveMarkers()
+        
+        // Notify UI to remove labeled marker ids for deleted marker
+        onMarkerDeleted?.invoke(removedId)
     }
 
     fun setMarkerQuantity(markerId: Long, newQuantity: Int) {
@@ -494,12 +486,12 @@ class MarkersViewModel(
     companion object {
         val LocalMarkersViewModel = compositionLocalOf<MarkersViewModel?> { null }
 
-        fun Factory(context: android.content.Context): androidx.lifecycle.ViewModelProvider.Factory =
+        fun Factory(context: android.content.Context, profileName: String): androidx.lifecycle.ViewModelProvider.Factory =
             object : ViewModelProvider.Factory {
                 @Suppress("UNCHECKED_CAST")
                 override fun <T : ViewModel> create(modelClass: Class<T>): T {
                     if (modelClass.isAssignableFrom(MarkersViewModel::class.java)) {
-                        return MarkersViewModel(context) as T
+                        return MarkersViewModel(context, profileName) as T
                     }
                     throw IllegalArgumentException("Unknown ViewModel class")
                 }
