@@ -23,6 +23,7 @@ data class UiState(
     val treesCount: Int = 0,
     val snowmenCount: Int = 0,
     val decorationsCount: Int = 0,
+    val grinchCount: Int = 0,
     val treesSmallCount: Int = 0,
     val treesNormalCount: Int = 0,
     val treesBossCount: Int = 0,
@@ -32,6 +33,9 @@ data class UiState(
     val decorationsSmallCount: Int = 0,
     val decorationsNormalCount: Int = 0,
     val decorationsBossCount: Int = 0,
+    val grinchSmallCount: Int = 0,
+    val grinchNormalCount: Int = 0,
+    val grinchBossCount: Int = 0,
     val currentLocation: Location? = null,
     val isLocationPermissionGranted: Boolean = false,
     val isLoadingLocation: Boolean = false,
@@ -45,6 +49,7 @@ private fun computeCounts(m: List<Marker>): List<IntArray> {
     var tTotal = 0
     var sTotal = 0
     var dTotal = 0
+    var gTotal = 0
     var tSmall = 0
     var tNormal = 0
     var tBoss = 0
@@ -54,11 +59,15 @@ private fun computeCounts(m: List<Marker>): List<IntArray> {
     var dSmall = 0
     var dNormal = 0
     var dBoss = 0
+    var gSmall = 0
+    var gNormal = 0
+    var gBoss = 0
 
     // Accumulate small quantities separately for correct division
     var tSmallAcc = 0
     var sSmallAcc = 0
     var dSmallAcc = 0
+    var gSmallAcc = 0
 
     for (marker in m) {
         val mSize = marker.markerSize()
@@ -111,6 +120,22 @@ private fun computeCounts(m: List<Marker>): List<IntArray> {
                     }
                 }
             }
+            MarkerType.GRINCH -> {
+                when (mSize) {
+                    MarkerSize.SMALL -> {
+                        gSmall += marker.quantity
+                        gSmallAcc += marker.quantity
+                    }
+                    MarkerSize.NORMAL -> {
+                        gNormal += marker.quantity
+                        gTotal += marker.quantity
+                    }
+                    MarkerSize.BOSS -> {
+                        gBoss++
+                        gTotal += marker.quantity
+                    }
+                }
+            }
         }
     }
     // SMALL markers contribute 1/10 of their quantity to the total count.
@@ -118,12 +143,14 @@ private fun computeCounts(m: List<Marker>): List<IntArray> {
     tTotal += tSmallAcc / 10
     sTotal += sSmallAcc / 10
     dTotal += dSmallAcc / 10
+    gTotal += gSmallAcc / 10
 
     return listOf(
-        intArrayOf(tTotal, sTotal, dTotal),
+        intArrayOf(tTotal, sTotal, dTotal, gTotal),
         intArrayOf(tSmall, tNormal, tBoss),
         intArrayOf(sSmall, sNormal, sBoss),
-        intArrayOf(dSmall, dNormal, dBoss)
+        intArrayOf(dSmall, dNormal, dBoss),
+        intArrayOf(gSmall, gNormal, gBoss)
     )
 }
 
@@ -216,12 +243,14 @@ class MarkersViewModel(
         val treeSizes = counts[1]
         val snowmanSizes = counts[2]
         val decorationSizes = counts[3]
+        val grinchSizes = counts[4]
 
         uiState = uiState.copy(
             markers = markers,
             treesCount = totals[0],
             snowmenCount = totals[1],
             decorationsCount = totals[2],
+            grinchCount = totals[3],
             treesSmallCount = treeSizes[0],
             treesNormalCount = treeSizes[1],
             treesBossCount = treeSizes[2],
@@ -230,9 +259,12 @@ class MarkersViewModel(
             snowmenBossCount = snowmanSizes[2],
             decorationsSmallCount = decorationSizes[0],
             decorationsNormalCount = decorationSizes[1],
-            decorationsBossCount = decorationSizes[2]
+            decorationsBossCount = decorationSizes[2],
+            grinchSmallCount = grinchSizes[0],
+            grinchNormalCount = grinchSizes[1],
+            grinchBossCount = grinchSizes[2]
         )
-        android.util.Log.d("MarkersViewModel", "syncUiState: trees=${totals[0]} snowmen=${totals[1]} decorations=${totals[2]}")
+        android.util.Log.d("MarkersViewModel", "syncUiState: trees=${totals[0]} snowmen=${totals[1]} decorations=${totals[2]} grinch=${totals[3]}")
     }
     
     fun refreshUiState() {

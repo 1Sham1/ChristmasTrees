@@ -8,6 +8,7 @@ import android.graphics.Color as AndroidColor
 import android.graphics.Paint
 import android.graphics.Rect
 import android.graphics.drawable.BitmapDrawable
+import androidx.appcompat.widget.AppCompatImageView
 import android.os.Handler
 import android.os.Looper
 import android.view.MotionEvent
@@ -18,6 +19,8 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Divider
 import androidx.compose.foundation.text.KeyboardOptions
@@ -41,6 +44,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.viewinterop.AndroidView
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.viewinterop.AndroidView
 import com.example.christmastrees.data.MarkerSize
 import com.example.christmastrees.data.MarkerType
@@ -146,7 +151,11 @@ fun MapScreen(
                     val latLng = GeoPoint(marker.latitude, marker.longitude)
 
                     val markerSize = marker.markerSize()
-                    val bitmap = createEmojiMarkerBitmap(type.emoji, marker.quantity, markerSize)
+                    val bitmap = if (type == MarkerType.GRINCH) {
+                        createGrinchMarkerBitmap(context.applicationContext, marker.quantity, markerSize)
+                    } else {
+                        createEmojiMarkerBitmap(type.emoji, marker.quantity, markerSize)
+                    }
                     val markerIcon = BitmapDrawable(mapView.resources, bitmap)
                     val osmdroidMarker = OsmdroidMarker(mapView).apply {
                         position = latLng
@@ -176,6 +185,7 @@ fun MapScreen(
     val treesCount by derivedStateOf { uiState.treesCount }
     val snowmenCount by derivedStateOf { uiState.snowmenCount }
     val decorationsCount by derivedStateOf { uiState.decorationsCount }
+    val grinchCount by derivedStateOf { uiState.grinchCount }
     
     val pendingMarkerType = remember { mutableStateOf<MarkerType?>(null) }
     
@@ -234,7 +244,11 @@ fun MapScreen(
                     val mapView = mapViewRef.value ?: return@post
                     val type = newMarker.markerType()
                     val latLng = GeoPoint(newMarker.latitude, newMarker.longitude)
-                    val bitmap = createEmojiMarkerBitmap(type.emoji, newMarker.quantity, newMarker.markerSize())
+                    val bitmap = if (type == MarkerType.GRINCH) {
+                        createGrinchMarkerBitmap(context.applicationContext, newMarker.quantity, newMarker.markerSize())
+                    } else {
+                        createEmojiMarkerBitmap(type.emoji, newMarker.quantity, newMarker.markerSize())
+                    }
                     
                     val markerIcon = BitmapDrawable(mapView.resources, bitmap)
                     val osmdroidMarker = OsmdroidMarker(mapView).apply {
@@ -562,10 +576,21 @@ fun MapScreen(
                                 horizontalAlignment = Alignment.CenterHorizontally,
                                 verticalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
-                                Text(
-                                    text = selectedMarker.markerType().emoji,
-                                    fontSize = 32.sp
-                                )
+                                if (selectedMarker.markerType() == MarkerType.GRINCH) {
+                                    AndroidView(
+                                        factory = { ctx ->
+                                            AppCompatImageView(ctx).apply {
+                                                layoutParams = android.view.ViewGroup.LayoutParams(48, 48)
+                                                setImageBitmap(createGrinchFaceBitmap(48))
+                                            }
+                                        }
+                                    )
+                                } else {
+                                    Text(
+                                        text = selectedMarker.markerType().emoji,
+                                        fontSize = 32.sp
+                                    )
+                                }
 
                                 // Editable name field
                                 Text(
@@ -925,12 +950,17 @@ fun MapScreen(
         }
         
         // Marker counters at the top (drawn last = on top)
-        Row(
+        Box(
             modifier = Modifier
                 .align(Alignment.TopCenter)
-                .padding(top = 56.dp, start = 8.dp, end = 8.dp),
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                .padding(top = 56.dp, start = 8.dp, end = 8.dp)
         ) {
+            Row(
+                modifier = Modifier
+                    .wrapContentWidth()
+                    .horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
                 CounterCard(
                     markerType = MarkerType.CHRISTMAS_TREE,
                     count = treesCount,
@@ -955,6 +985,15 @@ fun MapScreen(
                     normalCount = uiState.decorationsNormalCount,
                     bossCount = uiState.decorationsBossCount
                 )
+                CounterCard(
+                    markerType = MarkerType.GRINCH,
+                    count = grinchCount,
+                    label = "Гринч",
+                    smallCount = uiState.grinchSmallCount,
+                    normalCount = uiState.grinchNormalCount,
+                    bossCount = uiState.grinchBossCount
+                )
+            }
         }
     }
 }
@@ -989,6 +1028,326 @@ private fun createLocationBitmap(zoomLevel: Double): Bitmap {
     return bitmap
 }
 
+private fun createGrinchMarkerBitmap(
+    appCtx: android.content.Context,
+    quantity: Int,
+    size: com.example.christmastrees.data.MarkerSize
+): Bitmap {
+    val bitmapSize = size.iconSize
+    val bitmap = Bitmap.createBitmap(bitmapSize, bitmapSize, Bitmap.Config.ARGB_8888)
+    val canvas = Canvas(bitmap)
+    val cx = bitmapSize / 2f
+    val cy = bitmapSize / 2f
+    
+    // Draw background circle
+    val bgPaint = Paint().apply {
+        color = AndroidColor.parseColor("#E3F2FD")
+        isAntiAlias = true
+    }
+    canvas.drawCircle(cx, cy, bitmapSize / 2f, bgPaint)
+    
+    // Draw border circle with size-specific color
+    val borderPaint = Paint().apply {
+        color = size.borderColor
+        strokeWidth = (3f * size.iconScale).coerceAtMost(5f)
+        isAntiAlias = true
+        style = Paint.Style.STROKE
+    }
+    canvas.drawCircle(cx, cy, bitmapSize / 2f - 2f, borderPaint)
+    
+    // Scale factor for Grinch drawing
+    val scale = size.iconScale
+    val faceSize = bitmapSize * 0.22f * scale
+    
+    // Grinch colors
+    val greenPaint = Paint().apply {
+        color = AndroidColor.parseColor("#4CAF50")
+        isAntiAlias = true
+    }
+    val lightGreenPaint = Paint().apply {
+        color = AndroidColor.parseColor("#66BB6A")
+        isAntiAlias = true
+    }
+    val darkGreenPaint = Paint().apply {
+        color = AndroidColor.parseColor("#2E7D32")
+        isAntiAlias = true
+    }
+    val whitePaint = Paint().apply {
+        color = AndroidColor.parseColor("#FFFFFF")
+        isAntiAlias = true
+    }
+    val darkEyePaint = Paint().apply {
+        color = AndroidColor.parseColor("#1B5E20")
+        isAntiAlias = true
+    }
+    val redPaint = Paint().apply {
+        color = AndroidColor.parseColor("#C62828")
+        isAntiAlias = true
+    }
+    val hatWhitePaint = Paint().apply {
+        color = AndroidColor.parseColor("#F5F5F5")
+        isAntiAlias = true
+    }
+    val mouthPaint = Paint().apply {
+        color = AndroidColor.parseColor("#1B5E20")
+        isAntiAlias = true
+    }
+    
+    // Face shape - round monster head
+    val faceRadius = faceSize
+    canvas.drawCircle(cx, cy + faceSize * 0.1f, faceRadius, greenPaint)
+    
+    // Left cheek highlight
+    canvas.drawCircle(cx - faceSize * 0.5f, cy + faceSize * 0.3f, faceSize * 0.3f, lightGreenPaint)
+    
+    // Right cheek highlight
+    canvas.drawCircle(cx + faceSize * 0.5f, cy + faceSize * 0.3f, faceSize * 0.3f, lightGreenPaint)
+    
+    // Left eye - slightly angled up (mischievous look)
+    val eyeW = faceSize * 0.3f
+    val eyeH = faceSize * 0.28f
+    val leftEyeX = cx - faceSize * 0.35f
+    val rightEyeX = cx + faceSize * 0.35f
+    val eyeY = cy - faceSize * 0.15f
+    
+    // Eye whites (slanted ovals)
+    canvas.drawOval(
+        android.graphics.RectF(leftEyeX - eyeW, eyeY - eyeH, leftEyeX + eyeW, eyeY + eyeH),
+        whitePaint
+    )
+    canvas.drawOval(
+        android.graphics.RectF(rightEyeX - eyeW, eyeY - eyeH, rightEyeX + eyeW, eyeY + eyeH),
+        whitePaint
+    )
+    
+    // Pupils (green, looking slightly to the side)
+    canvas.drawCircle(leftEyeX + eyeW * 0.15f, eyeY, eyeW * 0.35f, darkEyePaint)
+    canvas.drawCircle(rightEyeX + eyeW * 0.15f, eyeY, eyeW * 0.35f, darkEyePaint)
+    
+    // Eye highlights
+    canvas.drawCircle(leftEyeX + eyeW * 0.3f, eyeY - eyeH * 0.3f, eyeW * 0.12f, whitePaint)
+    canvas.drawCircle(rightEyeX + eyeW * 0.3f, eyeY - eyeH * 0.3f, eyeW * 0.12f, whitePaint)
+    
+    // Eyebrows (angry/mischievous)
+    val browPaint = Paint().apply {
+        color = AndroidColor.parseColor("#1B5E20")
+        strokeWidth = faceSize * 0.08f
+        isAntiAlias = true
+    }
+    canvas.drawLine(leftEyeX - eyeW, eyeY - eyeH - faceSize * 0.05f, leftEyeX + eyeW * 0.5f, eyeY - eyeH - faceSize * 0.2f, browPaint)
+    canvas.drawLine(rightEyeX - eyeW * 0.5f, eyeY - eyeH - faceSize * 0.2f, rightEyeX + eyeW, eyeY - eyeH - faceSize * 0.05f, browPaint)
+    
+    // Nose - small protruding (Grinch has a distinctive nose)
+    canvas.drawCircle(cx, cy + faceSize * 0.05f, faceSize * 0.12f, darkGreenPaint)
+    canvas.drawCircle(cx - faceSize * 0.04f, cy + faceSize * 0.0f, faceSize * 0.05f, lightGreenPaint)
+    
+    // Mouth - big wide grin with teeth
+    val mouthY = cy + faceSize * 0.4f
+    val mouthPath = android.graphics.Path()
+    mouthPath.moveTo(cx - faceSize * 0.65f, mouthY - faceSize * 0.05f)
+    mouthPath.quadTo(cx, mouthY + faceSize * 0.4f, cx + faceSize * 0.65f, mouthY - faceSize * 0.05f)
+    mouthPath.lineTo(cx + faceSize * 0.65f, mouthY + faceSize * 0.15f)
+    mouthPath.quadTo(cx, mouthY + faceSize * 0.55f, cx - faceSize * 0.65f, mouthY + faceSize * 0.15f)
+    mouthPath.close()
+    canvas.drawPath(mouthPath, mouthPaint)
+    
+    // Teeth (white rectangles in mouth)
+    val toothPaint = Paint().apply {
+        color = AndroidColor.parseColor("#FFFFFF")
+        isAntiAlias = true
+    }
+    val toothCount = 6
+    val toothWidth = faceSize * 0.1f
+    for (i in 0 until toothCount) {
+        val tx = cx - faceSize * 0.5f + i * (faceSize * 0.2f)
+        canvas.drawRect(
+            android.graphics.RectF(tx, mouthY + faceSize * 0.05f, tx + toothWidth, mouthY + faceSize * 0.22f),
+            toothPaint
+        )
+    }
+    
+    // Chin highlight
+    canvas.drawCircle(cx, cy + faceSize * 0.7f, faceSize * 0.25f, lightGreenPaint)
+    
+    // Ears - pointed monster ears
+    val earPaint = Paint().apply {
+        color = AndroidColor.parseColor("#388E3C")
+        isAntiAlias = true
+    }
+    val innerEarPaint = Paint().apply {
+        color = AndroidColor.parseColor("#4CAF50")
+        isAntiAlias = true
+    }
+    // Left ear
+    val leftEarPath = android.graphics.Path()
+    leftEarPath.moveTo(cx - faceSize * 0.85f, cy - faceSize * 0.3f)
+    leftEarPath.lineTo(cx - faceSize * 1.2f, cy - faceSize * 0.9f)
+    leftEarPath.lineTo(cx - faceSize * 0.6f, cy - faceSize * 0.7f)
+    leftEarPath.close()
+    canvas.drawPath(leftEarPath, earPaint)
+    // Right ear
+    val rightEarPath = android.graphics.Path()
+    rightEarPath.moveTo(cx + faceSize * 0.85f, cy - faceSize * 0.3f)
+    rightEarPath.lineTo(cx + faceSize * 1.2f, cy - faceSize * 0.9f)
+    rightEarPath.lineTo(cx + faceSize * 0.6f, cy - faceSize * 0.7f)
+    rightEarPath.close()
+    canvas.drawPath(rightEarPath, earPaint)
+    
+    // Christmas hat - red Santa/Grinch hat
+    val hatBaseY = cy - faceSize * 0.7f
+    val hatTopY = cy - faceSize * 1.7f
+    
+    // Hat body (red)
+    val hatPath = android.graphics.Path()
+    hatPath.moveTo(cx - faceSize * 0.7f, hatBaseY)
+    hatPath.quadTo(cx - faceSize * 0.9f, (hatBaseY + hatTopY) / 2f, cx + faceSize * 0.1f, hatTopY)
+    hatPath.lineTo(cx + faceSize * 0.3f, hatTopY - faceSize * 0.05f)
+    hatPath.quadTo(cx + faceSize * 0.5f, (hatBaseY + hatTopY) / 2f, cx + faceSize * 0.7f, hatBaseY)
+    hatPath.close()
+    canvas.drawPath(hatPath, redPaint)
+    
+    // Hat brim (white fluffy)
+    canvas.drawRoundRect(
+        android.graphics.RectF(cx - faceSize * 0.8f, hatBaseY - faceSize * 0.1f, cx + faceSize * 0.8f, hatBaseY + faceSize * 0.1f),
+        faceSize * 0.15f,
+        faceSize * 0.15f,
+        hatWhitePaint
+    )
+    
+    // Hat pom-pom (white ball on top)
+    canvas.drawCircle(cx + faceSize * 0.2f, hatTopY, faceSize * 0.15f, hatWhitePaint)
+    
+    // Draw quantity badge at top-right
+    if (quantity > 1) {
+        val badgeRadius = (20f * size.iconScale).coerceAtMost(25f)
+        val badgeX = bitmapSize - 18f * size.iconScale
+        val badgeY = 18f * size.iconScale
+        
+        val badgePaint = Paint().apply {
+            color = size.badgeColor
+            isAntiAlias = true
+        }
+        canvas.drawCircle(badgeX, badgeY, badgeRadius, badgePaint)
+        
+        val badgeTextPaint = Paint().apply {
+            color = AndroidColor.WHITE
+            textSize = (20f * size.iconScale).coerceAtMost(24f)
+            isAntiAlias = true
+            textAlign = Paint.Align.CENTER
+        }
+        canvas.drawText(quantity.toString(), badgeX, badgeY + (7f * size.iconScale).toFloat(), badgeTextPaint)
+    }
+    
+    // BOSS: Draw crown/star decoration around the marker
+    if (size == com.example.christmastrees.data.MarkerSize.BOSS) {
+        val starPaint = Paint().apply {
+            color = AndroidColor.parseColor("#FFD700")
+            isAntiAlias = true
+        }
+        val starPositions = listOf(
+            Pair(cx, 8f * size.iconScale),
+            Pair(bitmapSize - 8f * size.iconScale, cy),
+            Pair(cx, bitmapSize - 8f * size.iconScale),
+            Pair(8f * size.iconScale, cy)
+        )
+        for ((sx, sy) in starPositions) {
+            canvas.drawCircle(sx, sy, 3f * size.iconScale, starPaint)
+        }
+    }
+    
+    return bitmap
+}
+
+private fun createGrinchFaceBitmap(size: Int): Bitmap {
+    val bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
+    val canvas = Canvas(bitmap)
+    val cx = size / 2f
+    val cy = size / 2f
+    val faceSize = size * 0.35f
+    
+    val greenPaint = Paint().apply { color = AndroidColor.parseColor("#4CAF50"); isAntiAlias = true }
+    val lightGreenPaint = Paint().apply { color = AndroidColor.parseColor("#66BB6A"); isAntiAlias = true }
+    val darkGreenPaint = Paint().apply { color = AndroidColor.parseColor("#2E7D32"); isAntiAlias = true }
+    val whitePaint = Paint().apply { color = AndroidColor.parseColor("#FFFFFF"); isAntiAlias = true }
+    val darkEyePaint = Paint().apply { color = AndroidColor.parseColor("#1B5E20"); isAntiAlias = true }
+    val redPaint = Paint().apply { color = AndroidColor.parseColor("#C62828"); isAntiAlias = true }
+    val hatWhitePaint = Paint().apply { color = AndroidColor.parseColor("#F5F5F5"); isAntiAlias = true }
+    val mouthPaint = Paint().apply { color = AndroidColor.parseColor("#1B5E20"); isAntiAlias = true }
+    
+    // Face
+    canvas.drawCircle(cx, cy + faceSize * 0.1f, faceSize, greenPaint)
+    canvas.drawCircle(cx - faceSize * 0.5f, cy + faceSize * 0.3f, faceSize * 0.3f, lightGreenPaint)
+    canvas.drawCircle(cx + faceSize * 0.5f, cy + faceSize * 0.3f, faceSize * 0.3f, lightGreenPaint)
+    
+    // Eyes
+    val eyeW = faceSize * 0.3f
+    val eyeH = faceSize * 0.28f
+    val leftEyeX = cx - faceSize * 0.35f
+    val rightEyeX = cx + faceSize * 0.35f
+    val eyeY = cy - faceSize * 0.15f
+    canvas.drawOval(android.graphics.RectF(leftEyeX - eyeW, eyeY - eyeH, leftEyeX + eyeW, eyeY + eyeH), whitePaint)
+    canvas.drawOval(android.graphics.RectF(rightEyeX - eyeW, eyeY - eyeH, rightEyeX + eyeW, eyeY + eyeH), whitePaint)
+    canvas.drawCircle(leftEyeX + eyeW * 0.15f, eyeY, eyeW * 0.35f, darkEyePaint)
+    canvas.drawCircle(rightEyeX + eyeW * 0.15f, eyeY, eyeW * 0.35f, darkEyePaint)
+    canvas.drawCircle(leftEyeX + eyeW * 0.3f, eyeY - eyeH * 0.3f, eyeW * 0.12f, whitePaint)
+    canvas.drawCircle(rightEyeX + eyeW * 0.3f, eyeY - eyeH * 0.3f, eyeW * 0.12f, whitePaint)
+    
+    // Eyebrows
+    val browPaint = Paint().apply { color = AndroidColor.parseColor("#1B5E20"); strokeWidth = faceSize * 0.08f; isAntiAlias = true }
+    canvas.drawLine(leftEyeX - eyeW, eyeY - eyeH - faceSize * 0.05f, leftEyeX + eyeW * 0.5f, eyeY - eyeH - faceSize * 0.2f, browPaint)
+    canvas.drawLine(rightEyeX - eyeW * 0.5f, eyeY - eyeH - faceSize * 0.2f, rightEyeX + eyeW, eyeY - eyeH - faceSize * 0.05f, browPaint)
+    
+    // Nose
+    canvas.drawCircle(cx, cy + faceSize * 0.05f, faceSize * 0.12f, darkGreenPaint)
+    
+    // Mouth
+    val mouthY = cy + faceSize * 0.4f
+    val mouthPath = android.graphics.Path()
+    mouthPath.moveTo(cx - faceSize * 0.65f, mouthY - faceSize * 0.05f)
+    mouthPath.quadTo(cx, mouthY + faceSize * 0.4f, cx + faceSize * 0.65f, mouthY - faceSize * 0.05f)
+    mouthPath.lineTo(cx + faceSize * 0.65f, mouthY + faceSize * 0.15f)
+    mouthPath.quadTo(cx, mouthY + faceSize * 0.55f, cx - faceSize * 0.65f, mouthY + faceSize * 0.15f)
+    mouthPath.close()
+    canvas.drawPath(mouthPath, mouthPaint)
+    
+    // Teeth
+    val toothPaint = Paint().apply { color = AndroidColor.parseColor("#FFFFFF"); isAntiAlias = true }
+    for (i in 0..4) {
+        val tx = cx - faceSize * 0.5f + i * (faceSize * 0.2f)
+        canvas.drawRect(android.graphics.RectF(tx, mouthY + faceSize * 0.05f, tx + faceSize * 0.1f, mouthY + faceSize * 0.22f), toothPaint)
+    }
+    
+    // Ears
+    val earPaint = Paint().apply { color = AndroidColor.parseColor("#388E3C"); isAntiAlias = true }
+    val leftEarPath = android.graphics.Path()
+    leftEarPath.moveTo(cx - faceSize * 0.85f, cy - faceSize * 0.3f)
+    leftEarPath.lineTo(cx - faceSize * 1.2f, cy - faceSize * 0.9f)
+    leftEarPath.lineTo(cx - faceSize * 0.6f, cy - faceSize * 0.7f)
+    leftEarPath.close()
+    canvas.drawPath(leftEarPath, earPaint)
+    val rightEarPath = android.graphics.Path()
+    rightEarPath.moveTo(cx + faceSize * 0.85f, cy - faceSize * 0.3f)
+    rightEarPath.lineTo(cx + faceSize * 1.2f, cy - faceSize * 0.9f)
+    rightEarPath.lineTo(cx + faceSize * 0.6f, cy - faceSize * 0.7f)
+    rightEarPath.close()
+    canvas.drawPath(rightEarPath, earPaint)
+    
+    // Hat
+    val hatBaseY = cy - faceSize * 0.7f
+    val hatTopY = cy - faceSize * 1.7f
+    val hatPath = android.graphics.Path()
+    hatPath.moveTo(cx - faceSize * 0.7f, hatBaseY)
+    hatPath.quadTo(cx - faceSize * 0.9f, (hatBaseY + hatTopY) / 2f, cx + faceSize * 0.1f, hatTopY)
+    hatPath.lineTo(cx + faceSize * 0.3f, hatTopY - faceSize * 0.05f)
+    hatPath.quadTo(cx + faceSize * 0.5f, (hatBaseY + hatTopY) / 2f, cx + faceSize * 0.7f, hatBaseY)
+    hatPath.close()
+    canvas.drawPath(hatPath, redPaint)
+    canvas.drawRoundRect(android.graphics.RectF(cx - faceSize * 0.8f, hatBaseY - faceSize * 0.1f, cx + faceSize * 0.8f, hatBaseY + faceSize * 0.1f), faceSize * 0.15f, faceSize * 0.15f, hatWhitePaint)
+    canvas.drawCircle(cx + faceSize * 0.2f, hatTopY, faceSize * 0.15f, hatWhitePaint)
+    
+    return bitmap
+}
+
 @Composable
 private fun CounterCard(
     markerType: MarkerType,
@@ -1004,7 +1363,7 @@ private fun CounterCard(
     Card(
         modifier = modifier
             .wrapContentWidth()
-            .wrapContentHeight()
+            .height(32.dp)
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },
                 indication = null,
@@ -1019,16 +1378,29 @@ private fun CounterCard(
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center,
-            modifier = Modifier.padding(4.dp)
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 8.dp)
         ) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(2.dp)
             ) {
-                Text(
-                    text = markerType.emoji,
-                    fontSize = 18.sp
-                )
+                if (markerType == MarkerType.GRINCH) {
+                    AndroidView(
+                        factory = { ctx ->
+                            AppCompatImageView(ctx).apply {
+                                layoutParams = android.view.ViewGroup.LayoutParams(48, 48)
+                                setImageBitmap(createGrinchFaceBitmap(48))
+                            }
+                        }
+                    )
+                } else {
+                    Text(
+                        text = markerType.emoji,
+                        fontSize = 18.sp
+                    )
+                }
                 Text(
                     text = count.toString(),
                     style = MaterialTheme.typography.titleSmall,

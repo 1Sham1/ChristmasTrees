@@ -19,7 +19,11 @@ enum class MarkerType(
     CITY_DECORATION("Украшения", "🎁", Category.DECORATIONS,
         android.graphics.Color.parseColor("#4A148C"),
         android.graphics.Color.parseColor("#FF5722"),
-        android.graphics.Color.parseColor("#FFD600"));
+        android.graphics.Color.parseColor("#FFD600")),
+    GRINCH("Гринч", "🧌", Category.CHARACTERS,
+        android.graphics.Color.parseColor("#2E7D32"),
+        android.graphics.Color.parseColor("#FFD600"),
+        android.graphics.Color.parseColor("#C62828"));
 
     companion object {
         fun fromString(value: String): MarkerType {
@@ -37,12 +41,14 @@ enum class Category(
 ) {
     TREES("Ёлки"),
     SNOWMEN("Снеговики"),
-    DECORATIONS("Украшения");
+    DECORATIONS("Украшения"),
+    CHARACTERS("Персонажи");
 
     val emoji: String
         get() = when (this) {
             TREES -> "🎄"
             SNOWMEN -> "☃️"
             DECORATIONS -> "🎁"
+            CHARACTERS -> "🧌"
         }
 }
