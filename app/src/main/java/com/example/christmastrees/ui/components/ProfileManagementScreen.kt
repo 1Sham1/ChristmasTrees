@@ -22,6 +22,8 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.Upload
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -66,11 +68,14 @@ fun ProfileManagementScreen(
     onDeleteProfile: (String) -> Unit,
     onRenameProfile: (String, String) -> Unit,
     onSwitchProfile: (String) -> Unit,
+    onExportProfile: (String) -> Unit,
+    onImportProfile: () -> Unit,
     onBack: () -> Unit
 ) {
     var showCreateDialog by remember { mutableStateOf(false) }
     var showRenameDialog by remember { mutableStateOf(false) }
     var showDeleteDialog by remember { mutableStateOf(false) }
+    var showExportDialog by remember { mutableStateOf(false) }
     var profileToRename by remember { mutableStateOf("") }
     var profileToDelete by remember { mutableStateOf("") }
     var expandedMenu by remember { mutableStateOf<String?>(null) }
@@ -95,6 +100,29 @@ fun ProfileManagementScreen(
                 }
             },
             actions = {
+                // Export button
+                IconButton(onClick = {
+                    if (profileNames.size == 1) {
+                        showExportDialog = true
+                    } else {
+                        // Show export dialog for each profile
+                        showExportDialog = true
+                    }
+                }) {
+                    Icon(
+                        imageVector = Icons.Default.Download,
+                        contentDescription = "Экспорт профиля",
+                        tint = ChristmasGreen
+                    )
+                }
+                // Import button
+                IconButton(onClick = onImportProfile) {
+                    Icon(
+                        imageVector = Icons.Default.Upload,
+                        contentDescription = "Импорт профиля",
+                        tint = ChristmasGreen
+                    )
+                }
                 IconButton(onClick = { showCreateDialog = true }) {
                     Icon(
                         imageVector = Icons.Default.Add,
@@ -211,6 +239,18 @@ fun ProfileManagementScreen(
                 }) {
                     Text("Отмена")
                 }
+            }
+        )
+    }
+
+    // Export Dialog - select profile to export
+    if (showExportDialog) {
+        ExportProfileDialog(
+            profileNames = profileNames,
+            onDismiss = { showExportDialog = false },
+            onExport = { profileName ->
+                onExportProfile(profileName)
+                showExportDialog = false
             }
         )
     }
@@ -404,3 +444,57 @@ fun RenameProfileDialog(
         }
     )
 }
+
+@Composable
+fun ExportProfileDialog(
+    profileNames: List<String>,
+    onDismiss: () -> Unit,
+    onExport: (String) -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Экспорт профиля") },
+        text = {
+            Column {
+                Text(
+                    text = "Выберите профиль для экспорта:",
+                    fontSize = 14.sp,
+                    color = Color.Gray,
+                    modifier = Modifier.padding(bottom = 12.dp)
+                )
+                profileNames.forEach { profileName ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                onExport(profileName)
+                                onDismiss()
+                            }
+                            .padding(vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Person,
+                            contentDescription = null,
+                            tint = ChristmasGreen,
+                            modifier = Modifier.size(24.dp)
+                        )
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Text(
+                            text = profileName,
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Отмена")
+            }
+        }
+    )
+}
+
+

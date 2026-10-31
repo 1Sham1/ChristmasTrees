@@ -2,8 +2,13 @@ package com.example.christmastrees.util
 
 import android.content.Context
 import android.content.Context.MODE_PRIVATE
+import android.net.Uri
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
+import com.example.christmastrees.data.ExportProfile
+import com.example.christmastrees.data.EXPORT_VERSION
+import com.example.christmastrees.viewmodel.Marker
+import android.util.Log
 
 object ProfileManager {
 
@@ -173,6 +178,107 @@ object ProfileManager {
         editor.apply()
 
         oldPrefs.edit().clear().apply()
+    }
+
+    fun exportProfileToJson(context: Context, profileName: String, uri: Uri): Result<String> {
+        return try {
+            val appCtx = context.applicationContext
+
+            // Load markers
+            val markerPrefs = appCtx.getSharedPreferences("markers_data_$profileName", MODE_PRIVATE)
+            val markersJson = markerPrefs.getString("markers_json", "[]") ?: "[]"
+            val gson = Gson()
+            val markerType = object : TypeToken<List<Marker>>() {}.type
+            val markers: List<Marker> = gson.fromJson(markersJson, markerType) ?: emptyList()
+
+            // Load app settings
+            val settingsPrefs = appCtx.getSharedPreferences("app_settings_$profileName", MODE_PRIVATE)
+            val musicEnabled = settingsPrefs.getBoolean("music_enabled", true)
+            val snowEnabled = settingsPrefs.getBoolean("snow_enabled", true)
+
+            // Load map settings
+            val mapPrefs = appCtx.getSharedPreferences("map_settings_$profileName", MODE_PRIVATE)
+            val mapLat = mapPrefs.getFloat("lat", 0f)
+            val mapLon = mapPrefs.getFloat("lon", 0f)
+            val mapZoom = mapPrefs.getFloat("zoom", 0f)
+
+            // Create export object
+            val exportProfile = ExportProfile(
+                version = EXPORT_VERSION,
+                exportedProfile = profileName,
+                markers = markers,
+                musicEnabled = musicEnabled,
+                snowEnabled = snowEnabled,
+                mapLat = mapLat,
+                mapLon = mapLon,
+                mapZoom = mapZoom
+            )
+
+            // Serialize to JSON
+            val exportJson = gson.toJson(exportProfile)
+
+            // Write to file
+            appCtx.contentResolver.openOutputStream(uri, "rwt")?.use { outputStream ->
+                outputStream.write(exportJson.toByteArray(Charsets.UTF_8))
+            }
+
+            Log.d("ProfileManager", "Exported profile '$profileName' with ${markers.size} markers to $uri")
+            Result.success("Профиль '$profileName' успешно экспортирован")
+        } catch (e: Exception) {
+            Log.e("ProfileManager", "Failed to export profile", e)
+            Result.failure(e)
+        }
+    }
+
+    fun importProfileFromJson(context: Context, uri: Uri, targetProfileName: String): Result<String> {
+        return try {
+            val appCtx = context.applicationContext
+
+            // Read and parse JSON
+            val json = appCtx.contentResolver.openInputStream(uri)?.use { inputStream ->
+                inputStream.bufferedReader(Charsets.UTF_8).readText()
+            } ?: return Result.failure(Exception("Не удалось прочитать файл"))
+
+            val gson = Gson()
+            val exportProfile = gson.fromJson(json, ExportProfile::class.java)
+
+            // Validate version
+            if (exportProfile.version != EXPORT_VERSION) {
+                return Result.failure(Exception("Неподдерживаемая версия формата экспорта: ${exportProfile.version}"))
+            }
+
+            // Validate target profile exists
+            val profileNames = getProfileNames(appCtx)
+            if (!profileNames.contains(targetProfileName)) {
+                return Result.failure(Exception("Профиль '$targetProfileName' не найден"))
+            }
+
+            // Save markers
+            val markerPrefs = appCtx.getSharedPreferences("markers_data_$targetProfileName", MODE_PRIVATE)
+            val markersJson = gson.toJson(exportProfile.markers)
+            markerPrefs.edit().putString("markers_json", markersJson).commit()
+
+            // Save app settings
+            val settingsPrefs = appCtx.getSharedPreferences("app_settings_$targetProfileName", MODE_PRIVATE)
+            settingsPrefs.edit()
+                .putBoolean("music_enabled", exportProfile.musicEnabled)
+                .putBoolean("snow_enabled", exportProfile.snowEnabled)
+                .commit()
+
+            // Save map settings
+            val mapPrefs = appCtx.getSharedPreferences("map_settings_$targetProfileName", MODE_PRIVATE)
+            mapPrefs.edit()
+                .putFloat("lat", exportProfile.mapLat)
+                .putFloat("lon", exportProfile.mapLon)
+                .putFloat("zoom", exportProfile.mapZoom)
+                .commit()
+
+            Log.d("ProfileManager", "Imported profile '$targetProfileName' with ${exportProfile.markers.size} markers from $uri")
+            Result.success("Профиль '$targetProfileName' успешно импортирован (${exportProfile.markers.size} маркеров)")
+        } catch (e: Exception) {
+            Log.e("ProfileManager", "Failed to import profile", e)
+            Result.failure(e)
+        }
     }
 
     fun migrateDataToProfile(context: Context, profileName: String) {

@@ -51,4 +51,12 @@
     <string name="list_empty">Пока нет размеченных объектов</string>
     <string name="list_empty_hint">Перейдите на вкладку Карта и добавьте метки!</string>
     <string name="list_item_delete">Удалить метку</string>
+
+    <!-- Export/Import -->
+    <string name="export_profile_title">Экспорт профиля</string>
+    <string name="import_profile_title">Импорт профиля</string>
+    <string name="export_profile_hint">Выберите профиль для экспорта:</string>
+    <string name="import_profile_hint">Выберите профиль, в который будут импортированы данные. Данные текущего профиля будут заменены.</string>
+    <string name="export_file_label">Файл профиля</string>
+    <string name="import_file_label">Выберите JSON файл</string>
 </resources>

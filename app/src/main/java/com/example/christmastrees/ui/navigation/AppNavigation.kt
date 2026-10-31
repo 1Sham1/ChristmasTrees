@@ -3,10 +3,12 @@
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Search
@@ -18,7 +20,12 @@ import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Text
+import androidx.compose.material3.SnackbarDuration
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Button
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.graphics.Color
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
@@ -27,18 +34,22 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.compositionLocalOf
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLifecycleOwner
 import android.app.Activity
 import android.content.Intent
 import android.content.Context
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.runtime.setValue
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.TextButton
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
-import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -54,6 +65,7 @@ import com.example.christmastrees.ui.components.SettingsDialog
 import com.example.christmastrees.ui.screens.ListScreen
 import com.example.christmastrees.ui.screens.MapScreen
 import com.example.christmastrees.MainActivity
+import kotlinx.coroutines.launch
 
 sealed class Screen(val route: String, val label: String, val icon: String) {
     object Map : Screen("map", "Карта", "🗺️")
@@ -84,6 +96,14 @@ fun AppNavigation(
     var showProfileSwitchDialog by remember { mutableStateOf(false) }
     var profileToSwitchTo by remember { mutableStateOf("") }
 
+    // Export/Import state
+    var profileToExport by remember { mutableStateOf("") }
+    var importResultMessage by remember { mutableStateOf<String?>(null) }
+    var showImportResultDialog by remember { mutableStateOf(false) }
+
+    val coroutineScope = rememberCoroutineScope()
+    val snackbarHostState = remember { SnackbarHostState() }
+
     // Load profiles on composition
     LaunchedEffect(Unit) {
         profileNames = ProfileManager.getProfileNames(appCtx)
@@ -97,6 +117,47 @@ fun AppNavigation(
             activeProfileName = ProfileManager.getActiveProfile(appCtx)
         }
     }
+
+    // Export file launcher
+    val exportLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.CreateDocument("application/json"),
+        onResult = { uri ->
+            if (uri != null && profileToExport.isNotBlank()) {
+                val result = ProfileManager.exportProfileToJson(appCtx, profileToExport, uri)
+                if (result.isSuccess) {
+                    coroutineScope.launch {
+                        snackbarHostState.showSnackbar(result.getOrNull() ?: "Экспорт выполнен")
+                    }
+                } else {
+                    coroutineScope.launch {
+                        snackbarHostState.showSnackbar("Ошибка экспорта: ${result.exceptionOrNull()?.message}", duration = SnackbarDuration.Long)
+                    }
+                }
+                profileToExport = ""
+            }
+        }
+    )
+
+    // Import file launcher
+    val importLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent(),
+        onResult = { uri ->
+            if (uri != null) {
+                if (activeProfileName.isBlank()) {
+                    coroutineScope.launch {
+                        snackbarHostState.showSnackbar("Ошибка: нет активных профилей", duration = SnackbarDuration.Long)
+                    }
+                    return@rememberLauncherForActivityResult
+                }
+                val result = ProfileManager.importProfileFromJson(appCtx, uri, activeProfileName)
+                importResultMessage = result.fold(
+                    onSuccess = { it },
+                    onFailure = { "Ошибка импорта: ${it.message}" }
+                )
+                showImportResultDialog = true
+            }
+        }
+    )
 
     CompositionLocalProvider(
         LocalShowSettingsDialog provides showSettingsDialog
@@ -114,6 +175,15 @@ fun AppNavigation(
         // Ensure audioManager is not null
         val safeAudioManager = audioManager
             ?: throw IllegalStateException("AudioManager not initialized. Check MainApplication.")
+
+        // Snackbar host for notifications
+        SnackbarHost(snackbarHostState) { data ->
+            androidx.compose.material3.Snackbar(
+                snackbarData = data,
+                containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                contentColor = MaterialTheme.colorScheme.onSurface
+            )
+        }
 
         // Load music state from settings on startup
         var isAudioPlaying by remember { mutableStateOf(SettingsManager.isMusicEnabled(safeAudioManager.appContext, activeProfileName)) }
@@ -166,8 +236,21 @@ fun AppNavigation(
                     },
                     onDeleteProfile = { name ->
                         if (ProfileManager.deleteProfile(appCtx, name)) {
+                            val oldActive = activeProfileName
                             profileNames = ProfileManager.getProfileNames(appCtx)
                             activeProfileName = ProfileManager.getActiveProfile(appCtx)
+                            // If the deleted profile was the active one, the app switched to Default
+                            // Need to restart to load the new profile's data
+                            if (oldActive != activeProfileName) {
+                                showProfileManagement = false
+                                val activity = context as? Activity
+                                if (activity != null) {
+                                    val intent = Intent(context, MainActivity::class.java).apply {
+                                        flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+                                    }
+                                    context.startActivity(intent)
+                                }
+                            }
                         }
                     },
                     onRenameProfile = { oldName, newName ->
@@ -186,7 +269,76 @@ fun AppNavigation(
                             showProfileSwitchDialog = true
                         }
                     },
+                    onExportProfile = { profileName ->
+                        profileToExport = profileName
+                        exportLauncher.launch("${profileName}_profile.json")
+                    },
+                    onImportProfile = {
+                        importLauncher.launch("application/json")
+                    },
                     onBack = { showProfileManagement = false }
+                )
+            }
+
+            // Import Result Dialog
+            if (showImportResultDialog) {
+                AlertDialog(
+                    onDismissRequest = {
+                        showImportResultDialog = false
+                        importResultMessage = null
+                    },
+                    title = { Text("Импорт профиля") },
+                    text = {
+                        if (importResultMessage?.contains("успешно импортирован") == true) {
+                            Column {
+                                Text(importResultMessage ?: "")
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Text(
+                                    text = "Для применения данных необходимо перезагрузить приложение.",
+                                    fontSize = 13.sp,
+                                    color = Color.Gray
+                                )
+                            }
+                        } else {
+                            Text(importResultMessage ?: "")
+                        }
+                    },
+                    confirmButton = {
+                        if (importResultMessage?.contains("успешно импортирован") == true) {
+                            Column {
+                                Button(
+                                    onClick = {
+                                        showImportResultDialog = false
+                                        importResultMessage = null
+                                        // Restart activity with new data
+                                        val activity = context as? Activity
+                                        if (activity != null) {
+                                            val intent = Intent(context, MainActivity::class.java).apply {
+                                                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+                                            }
+                                            context.startActivity(intent)
+                                        }
+                                    }
+                                ) {
+                                    Text("Перезагрузить")
+                                }
+                                Spacer(modifier = Modifier.height(4.dp))
+                                TextButton(onClick = {
+                                    showImportResultDialog = false
+                                    importResultMessage = null
+                                }) {
+                                    Text("Отмена")
+                                }
+                            }
+                        } else {
+                            TextButton(onClick = {
+                                showImportResultDialog = false
+                                importResultMessage = null
+                            }) {
+                                Text("OK")
+                            }
+                        }
+                    }
                 )
             }
 
