@@ -87,6 +87,7 @@ object ProfileManager {
         context.getSharedPreferences("markers_data_$name", MODE_PRIVATE).edit().clear().apply()
         context.getSharedPreferences("app_settings_$name", MODE_PRIVATE).edit().clear().apply()
         context.getSharedPreferences("map_settings_$name", MODE_PRIVATE).edit().clear().apply()
+        context.getSharedPreferences("custom_marker_types_$name", MODE_PRIVATE).edit().clear().apply()
 
         // If the deleted profile was active, switch to Default
         val activeProfile = prefs.getString(KEY_ACTIVE_PROFILE, DEFAULT_PROFILE_NAME)
@@ -202,11 +203,15 @@ object ProfileManager {
             val mapLon = mapPrefs.getFloat("lon", 0f)
             val mapZoom = mapPrefs.getFloat("zoom", 0f)
 
+            // Load custom marker types
+            val customTypes = com.example.christmastrees.util.CustomMarkerManager.loadCustomTypes(appCtx, profileName)
+
             // Create export object
             val exportProfile = ExportProfile(
                 version = EXPORT_VERSION,
                 exportedProfile = profileName,
                 markers = markers,
+                customMarkerTypes = customTypes,
                 musicEnabled = musicEnabled,
                 snowEnabled = snowEnabled,
                 mapLat = mapLat,
@@ -257,6 +262,15 @@ object ProfileManager {
             val markerPrefs = appCtx.getSharedPreferences("markers_data_$targetProfileName", MODE_PRIVATE)
             val markersJson = gson.toJson(exportProfile.markers)
             markerPrefs.edit().putString("markers_json", markersJson).commit()
+
+            // Save custom marker types
+            if (exportProfile.customMarkerTypes.isNotEmpty()) {
+                com.example.christmastrees.util.CustomMarkerManager.saveCustomTypes(
+                    appCtx,
+                    targetProfileName,
+                    exportProfile.customMarkerTypes
+                )
+            }
 
             // Save app settings
             val settingsPrefs = appCtx.getSharedPreferences("app_settings_$targetProfileName", MODE_PRIVATE)

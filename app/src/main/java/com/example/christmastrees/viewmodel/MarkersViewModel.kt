@@ -14,9 +14,21 @@ import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import com.example.christmastrees.data.CustomMarkerType
 import com.example.christmastrees.data.MarkerSize
 import com.example.christmastrees.data.MarkerType
+import com.example.christmastrees.data.MarkerTypeOrCustom
+import com.example.christmastrees.data.CUSTOM_MARKER_PREFIX
 import com.example.christmastrees.util.SettingsManager
+
+data class CustomMarkerCountEntry(
+    val customId: String,
+    val customName: String,
+    val total: Int = 0,
+    val small: Int = 0,
+    val normal: Int = 0,
+    val boss: Int = 0
+)
 
 data class UiState(
     val markers: List<Marker> = emptyList(),
@@ -36,6 +48,7 @@ data class UiState(
     val grinchSmallCount: Int = 0,
     val grinchNormalCount: Int = 0,
     val grinchBossCount: Int = 0,
+    val customMarkerCounts: List<CustomMarkerCountEntry> = emptyList(),
     val currentLocation: Location? = null,
     val isLocationPermissionGranted: Boolean = false,
     val isLoadingLocation: Boolean = false,
@@ -45,7 +58,7 @@ data class UiState(
     val centerOnLocation: Boolean = false
 )
 
-private fun computeCounts(m: List<Marker>): List<IntArray> {
+private fun computeCounts(m: List<Marker>, customTypes: List<CustomMarkerType> = emptyList()): List<Any> {
     var tTotal = 0
     var sTotal = 0
     var dTotal = 0
@@ -69,9 +82,39 @@ private fun computeCounts(m: List<Marker>): List<IntArray> {
     var dSmallAcc = 0
     var gSmallAcc = 0
 
+    // Custom marker counts
+    val customCountsMap = mutableMapOf<String, CustomMarkerCountEntry>()
+
     for (marker in m) {
         val mSize = marker.markerSize()
-        when (marker.markerType()) {
+
+        // Handle custom markers first
+        if (marker.type.startsWith(CUSTOM_MARKER_PREFIX)) {
+            val customId = marker.type.removePrefix(CUSTOM_MARKER_PREFIX)
+            val customType = customTypes.find { it.id == customId }
+            val customName = customType?.name ?: "Unknown"
+
+            val existing = customCountsMap[customId] ?: CustomMarkerCountEntry(customId, customName)
+            val newEntry = when (mSize) {
+                MarkerSize.SMALL -> existing.copy(
+                    small = existing.small + marker.quantity,
+                    total = existing.total + marker.quantity / 10
+                )
+                MarkerSize.NORMAL -> existing.copy(
+                    normal = existing.normal + marker.quantity,
+                    total = existing.total + marker.quantity
+                )
+                MarkerSize.BOSS -> existing.copy(
+                    boss = existing.boss + 1,
+                    total = existing.total + marker.quantity
+                )
+            }
+            customCountsMap[customId] = newEntry
+            continue
+        }
+
+        val markerType = marker.markerType()
+        when (markerType) {
             MarkerType.CHRISTMAS_TREE -> {
                 when (mSize) {
                     MarkerSize.SMALL -> {
@@ -83,7 +126,7 @@ private fun computeCounts(m: List<Marker>): List<IntArray> {
                         tTotal += marker.quantity
                     }
                     MarkerSize.BOSS -> {
-                        tBoss++
+                        tBoss += marker.quantity
                         tTotal += marker.quantity
                     }
                 }
@@ -99,7 +142,7 @@ private fun computeCounts(m: List<Marker>): List<IntArray> {
                         sTotal += marker.quantity
                     }
                     MarkerSize.BOSS -> {
-                        sBoss++
+                        sBoss += marker.quantity
                         sTotal += marker.quantity
                     }
                 }
@@ -115,7 +158,7 @@ private fun computeCounts(m: List<Marker>): List<IntArray> {
                         dTotal += marker.quantity
                     }
                     MarkerSize.BOSS -> {
-                        dBoss++
+                        dBoss += marker.quantity
                         dTotal += marker.quantity
                     }
                 }
@@ -131,10 +174,13 @@ private fun computeCounts(m: List<Marker>): List<IntArray> {
                         gTotal += marker.quantity
                     }
                     MarkerSize.BOSS -> {
-                        gBoss++
+                        gBoss += marker.quantity
                         gTotal += marker.quantity
                     }
                 }
+            }
+            else -> {
+                android.util.Log.w("computeCounts", "Unknown marker type for marker ${marker.id}")
             }
         }
     }
@@ -150,13 +196,14 @@ private fun computeCounts(m: List<Marker>): List<IntArray> {
         intArrayOf(tSmall, tNormal, tBoss),
         intArrayOf(sSmall, sNormal, sBoss),
         intArrayOf(dSmall, dNormal, dBoss),
-        intArrayOf(gSmall, gNormal, gBoss)
+        intArrayOf(gSmall, gNormal, gBoss),
+        customCountsMap.values.toList()
     )
 }
 
 sealed interface PlaceMarkerMode {
     object Idle : PlaceMarkerMode
-    data class Selecting(val selectedType: MarkerType) : PlaceMarkerMode
+    data class Selecting(val selectedType: MarkerTypeOrCustom) : PlaceMarkerMode
 }
 
 data class Marker(
@@ -171,6 +218,21 @@ data class Marker(
 ) {
     fun markerType(): MarkerType = MarkerType.fromString(type)
     fun markerSize(): MarkerSize = MarkerSize.entries.find { it.name == size } ?: MarkerSize.NORMAL
+
+    fun markerTypeOrCustom(customTypes: List<CustomMarkerType>): MarkerTypeOrCustom {
+        return if (type.startsWith(CUSTOM_MARKER_PREFIX)) {
+            val customId = type.removePrefix(CUSTOM_MARKER_PREFIX)
+            val custom = customTypes.find { it.id == customId }
+            if (custom != null) {
+                MarkerTypeOrCustom.Custom(custom)
+            } else {
+                // Custom type not found, default to CHRISTMAS_TREE
+                MarkerTypeOrCustom.BuiltIn(MarkerType.CHRISTMAS_TREE)
+            }
+        } else {
+            MarkerTypeOrCustom.BuiltIn(markerType())
+        }
+    }
 }
 
 class MarkersViewModel(
@@ -179,6 +241,9 @@ class MarkersViewModel(
 ) : ViewModel() {
 
     var markers by mutableStateOf<List<Marker>>(emptyList())
+        private set
+    
+    var customTypes by mutableStateOf<List<CustomMarkerType>>(emptyList())
         private set
     
     var uiState by mutableStateOf(UiState())
@@ -193,12 +258,60 @@ class MarkersViewModel(
         try {
             checkLocationPermission()
             loadMarkersFromStorage()
+            loadCustomTypesFromStorage()
             val snowEnabled = loadSnowState()
             uiState = uiState.copy(isSnowEnabled = snowEnabled)
             syncUiState()
         } catch (e: Exception) {
             e.printStackTrace()
         }
+    }
+
+    private fun loadCustomTypesFromStorage() {
+        try {
+            val appCtx = context.applicationContext
+            val loaded = com.example.christmastrees.util.CustomMarkerManager.loadCustomTypes(appCtx, profileName)
+            customTypes = loaded
+            android.util.Log.d("MarkersViewModel", "Loaded ${loaded.size} custom types for profile '$profileName'")
+        } catch (e: Exception) {
+            android.util.Log.e("MarkersViewModel", "Failed to load custom types", e)
+        }
+    }
+
+    private fun saveCustomTypesToStorage() {
+        try {
+            val appCtx = context.applicationContext
+            com.example.christmastrees.util.CustomMarkerManager.saveCustomTypes(appCtx, profileName, customTypes)
+        } catch (e: Exception) {
+            android.util.Log.e("MarkersViewModel", "Failed to save custom types", e)
+        }
+    }
+
+    fun addCustomType(name: String, iconBase64: String, bgColor: Int, borderColor: Int, accentColor: Int) {
+        val newId = java.util.UUID.randomUUID().toString()
+        val newType = CustomMarkerType(
+            id = newId,
+            name = name,
+            iconBase64 = iconBase64,
+            bgColor = bgColor,
+            borderColor = borderColor,
+            accentColor = accentColor,
+            profileName = profileName
+        )
+        customTypes = customTypes + newType
+        saveCustomTypesToStorage()
+    }
+
+    fun deleteCustomType(id: String) {
+        // Delete all markers of this custom type
+        val markersWithoutCustom = markers.filter { !it.type.startsWith(CUSTOM_MARKER_PREFIX) || it.type.removePrefix(CUSTOM_MARKER_PREFIX) != id }
+        if (markersWithoutCustom.size != markers.size) {
+            markers = markersWithoutCustom
+            saveMarkers()
+        }
+        customTypes = customTypes.filter { it.id != id }
+        saveCustomTypesToStorage()
+        syncUiState()
     }
 
     private fun loadMarkersFromStorage() {
@@ -239,11 +352,12 @@ class MarkersViewModel(
     
     private fun syncUiState() {
         val counts = computeCounts(markers)
-        val totals = counts[0]
-        val treeSizes = counts[1]
-        val snowmanSizes = counts[2]
-        val decorationSizes = counts[3]
-        val grinchSizes = counts[4]
+        val totals = counts[0] as IntArray
+        val treeSizes = counts[1] as IntArray
+        val snowmanSizes = counts[2] as IntArray
+        val decorationSizes = counts[3] as IntArray
+        val grinchSizes = counts[4] as IntArray
+        val customCounts = counts[5] as List<CustomMarkerCountEntry>
 
         uiState = uiState.copy(
             markers = markers,
@@ -262,7 +376,8 @@ class MarkersViewModel(
             decorationsBossCount = decorationSizes[2],
             grinchSmallCount = grinchSizes[0],
             grinchNormalCount = grinchSizes[1],
-            grinchBossCount = grinchSizes[2]
+            grinchBossCount = grinchSizes[2],
+            customMarkerCounts = customCounts
         )
         android.util.Log.d("MarkersViewModel", "syncUiState: trees=${totals[0]} snowmen=${totals[1]} decorations=${totals[2]} grinch=${totals[3]}")
     }
@@ -305,14 +420,23 @@ class MarkersViewModel(
         }
     }
 
-    fun placeMarker(latitude: Double, longitude: Double, type: MarkerType) {
-        android.util.Log.d("MarkersViewModel", "placeMarker called: lat=$latitude, lon=$longitude, type=${type.name}")
+    fun placeMarker(latitude: Double, longitude: Double, type: MarkerTypeOrCustom) {
+        val markerTypeStr = when (type) {
+            is MarkerTypeOrCustom.BuiltIn -> type.type.name
+            is MarkerTypeOrCustom.Custom -> CUSTOM_MARKER_PREFIX + type.custom.id
+        }
+        val markerName = when (type) {
+            is MarkerTypeOrCustom.BuiltIn -> type.type.label
+            is MarkerTypeOrCustom.Custom -> type.custom.name
+        }
+
+        android.util.Log.d("MarkersViewModel", "placeMarker called: lat=$latitude, lon=$longitude, type=$markerTypeStr")
         val newMarker = Marker(
             id = nextId++,
             latitude = latitude,
             longitude = longitude,
-            type = type.name,
-            name = type.label,
+            type = markerTypeStr,
+            name = markerName,
             timestamp = System.currentTimeMillis(),
             quantity = 1,
             size = MarkerSize.NORMAL.name
@@ -408,7 +532,7 @@ class MarkersViewModel(
         uiState = uiState.copy(placeMarkerMode = PlaceMarkerMode.Idle)
     }
 
-    fun startPlaceMarker(type: MarkerType) {
+    fun startPlaceMarker(type: MarkerTypeOrCustom) {
         uiState = uiState.copy(
             placeMarkerMode = PlaceMarkerMode.Selecting(type)
         )

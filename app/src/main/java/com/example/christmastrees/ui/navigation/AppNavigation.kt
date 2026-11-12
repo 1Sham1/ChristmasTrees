@@ -66,6 +66,8 @@ import com.example.christmastrees.ui.screens.ListScreen
 import com.example.christmastrees.ui.screens.MapScreen
 import com.example.christmastrees.MainActivity
 import kotlinx.coroutines.launch
+import java.time.LocalDateTime
+import java.time.format.DateTimeFormatter
 
 sealed class Screen(val route: String, val label: String, val icon: String) {
     object Map : Screen("map", "Карта", "🗺️")
@@ -271,7 +273,8 @@ fun AppNavigation(
                     },
                     onExportProfile = { profileName ->
                         profileToExport = profileName
-                        exportLauncher.launch("${profileName}_profile.json")
+                        val timestamp = LocalDateTime.now().format(DateTimeFormatter.ofPattern("dd-MM-yyyy__HH-mm-ss"))
+                        exportLauncher.launch("${profileName}_profile_$timestamp.json")
                     },
                     onImportProfile = {
                         importLauncher.launch("application/json")

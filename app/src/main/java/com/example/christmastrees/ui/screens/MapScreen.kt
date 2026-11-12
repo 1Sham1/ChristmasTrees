@@ -3,6 +3,7 @@ package com.example.christmastrees.ui.screens
 import android.Manifest
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.graphics.Canvas
 import android.graphics.Color as AndroidColor
 import android.graphics.Paint
@@ -16,6 +17,7 @@ import android.view.View
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -23,6 +25,7 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Divider
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
@@ -45,10 +48,14 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.viewinterop.AndroidView
+import com.example.christmastrees.data.CustomMarkerType
 import com.example.christmastrees.data.MarkerSize
 import com.example.christmastrees.data.MarkerType
+import com.example.christmastrees.data.MarkerTypeOrCustom
+import com.example.christmastrees.data.CUSTOM_MARKER_PREFIX
 import com.example.christmastrees.ui.components.GarlandOverlay
 import com.example.christmastrees.ui.components.LabelOverlay
 import com.example.christmastrees.ui.components.MarkerPickerBottomSheet
@@ -71,6 +78,8 @@ fun MapScreen(
     val context = LocalContext.current
     val uiState = viewModel.uiState
     val markers = viewModel.markers
+    val customTypes = viewModel.customTypes
+    var showCustomEditor by remember { mutableStateOf(false) }
     var selectedMarkerId by remember { mutableStateOf<Long?>(null) }
     var showContextMenu by remember { mutableStateOf(false) }
     var contextMenuMarkerName by remember { mutableStateOf("") }
@@ -147,14 +156,29 @@ fun MapScreen(
                 // Re-add all markers from ViewModel state
                 val newLabelOverlays = mutableListOf<LabelOverlay>()
                 for (marker in markers) {
-                    val type = marker.markerType()
                     val latLng = GeoPoint(marker.latitude, marker.longitude)
-
                     val markerSize = marker.markerSize()
-                    val bitmap = if (type == MarkerType.GRINCH) {
-                        createGrinchMarkerBitmap(context.applicationContext, marker.quantity, markerSize)
-                    } else {
-                        createEmojiMarkerBitmap(type.emoji, marker.quantity, markerSize)
+
+                    val typeOrCustom = marker.markerTypeOrCustom(customTypes)
+                    val bitmap = when (typeOrCustom) {
+                        is MarkerTypeOrCustom.BuiltIn -> {
+                            if (typeOrCustom.type == MarkerType.GRINCH) {
+                                createGrinchMarkerBitmap(context.applicationContext, marker.quantity, markerSize)
+                            } else {
+                                createEmojiMarkerBitmap(typeOrCustom.type.emoji, marker.quantity, markerSize)
+                            }
+                        }
+                        is MarkerTypeOrCustom.Custom -> {
+                            createCustomMarkerBitmap(
+                                context.applicationContext,
+                                typeOrCustom.custom.iconBase64,
+                                typeOrCustom.custom.bgColor,
+                                typeOrCustom.custom.borderColor,
+                                typeOrCustom.custom.accentColor,
+                                marker.quantity,
+                                markerSize
+                            )
+                        }
                     }
                     val markerIcon = BitmapDrawable(mapView.resources, bitmap)
                     val osmdroidMarker = OsmdroidMarker(mapView).apply {
@@ -167,7 +191,11 @@ fun MapScreen(
                     mapView.overlays.add(osmdroidMarker)
 
                     if (marker.id in labeledMarkerIds) {
-                        val labelOverlay = LabelOverlay(latLng, marker.name, marker.quantity, markerSize)
+                        val displayName = when (val toc = marker.markerTypeOrCustom(customTypes)) {
+                            is MarkerTypeOrCustom.Custom -> toc.custom.name
+                            is MarkerTypeOrCustom.BuiltIn -> marker.name
+                        }
+                        val labelOverlay = LabelOverlay(latLng, displayName, marker.quantity, markerSize)
                         newLabelOverlays.add(labelOverlay)
                         mapView.overlays.add(labelOverlay)
                     }
@@ -187,7 +215,7 @@ fun MapScreen(
     val decorationsCount by derivedStateOf { uiState.decorationsCount }
     val grinchCount by derivedStateOf { uiState.grinchCount }
     
-    val pendingMarkerType = remember { mutableStateOf<MarkerType?>(null) }
+    val pendingMarkerType = remember { mutableStateOf<MarkerTypeOrCustom?>(null) }
     
     // Drag mode state - activated from context menu
     var isDraggingMarker by remember { mutableStateOf(false) }
@@ -242,12 +270,27 @@ fun MapScreen(
             Handler(Looper.getMainLooper()).post {
                 try {
                     val mapView = mapViewRef.value ?: return@post
-                    val type = newMarker.markerType()
                     val latLng = GeoPoint(newMarker.latitude, newMarker.longitude)
-                    val bitmap = if (type == MarkerType.GRINCH) {
-                        createGrinchMarkerBitmap(context.applicationContext, newMarker.quantity, newMarker.markerSize())
-                    } else {
-                        createEmojiMarkerBitmap(type.emoji, newMarker.quantity, newMarker.markerSize())
+                    val typeOrCustom = newMarker.markerTypeOrCustom(customTypes)
+                    val bitmap = when (typeOrCustom) {
+                        is MarkerTypeOrCustom.BuiltIn -> {
+                            if (typeOrCustom.type == MarkerType.GRINCH) {
+                                createGrinchMarkerBitmap(context.applicationContext, newMarker.quantity, newMarker.markerSize())
+                            } else {
+                                createEmojiMarkerBitmap(typeOrCustom.type.emoji, newMarker.quantity, newMarker.markerSize())
+                            }
+                        }
+                        is MarkerTypeOrCustom.Custom -> {
+                            createCustomMarkerBitmap(
+                                context.applicationContext,
+                                typeOrCustom.custom.iconBase64,
+                                typeOrCustom.custom.bgColor,
+                                typeOrCustom.custom.borderColor,
+                                typeOrCustom.custom.accentColor,
+                                newMarker.quantity,
+                                newMarker.markerSize()
+                            )
+                        }
                     }
                     
                     val markerIcon = BitmapDrawable(mapView.resources, bitmap)
@@ -495,6 +538,7 @@ fun MapScreen(
 
         // Show tap hint when placing a marker
         if (pendingMarkerType.value != null) {
+            val pmt = pendingMarkerType.value!!
             Column(
                 modifier = Modifier
                     .fillMaxSize()
@@ -512,12 +556,12 @@ fun MapScreen(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
-                            text = pendingMarkerType.value!!.emoji,
+                            text = pmt.emoji,
                             fontSize = 24.sp,
                             modifier = Modifier.padding(end = 8.dp)
                         )
                         Text(
-                            text = "Нажмите на карту, чтобы поставить ${pendingMarkerType.value!!.label}",
+                            text = "Нажмите на карту, чтобы поставить ${pmt.label}",
                             modifier = Modifier.weight(1f),
                             style = MaterialTheme.typography.bodyMedium
                         )
@@ -919,6 +963,7 @@ fun MapScreen(
         // Picker bottom sheet
         if (localShowPicker) {
             MarkerPickerBottomSheet(
+                customTypes = customTypes,
                 onTypeSelected = { type ->
                     localShowPicker = false
                     onPickerStateChanged(false)
@@ -993,12 +1038,194 @@ fun MapScreen(
                     normalCount = uiState.grinchNormalCount,
                     bossCount = uiState.grinchBossCount
                 )
+
+                // Custom marker counters
+                uiState.customMarkerCounts.forEach { entry ->
+                    val customType = customTypes.find { it.id == entry.customId }
+                    CustomCounterCard(
+                        name = entry.customName,
+                        count = entry.total,
+                        smallCount = entry.small,
+                        normalCount = entry.normal,
+                        bossCount = entry.boss,
+                        iconBase64 = customType?.iconBase64 ?: ""
+                    )
+                }
             }
         }
     }
 }
 
 
+
+private fun createCustomMarkerBitmap(
+    appCtx: android.content.Context,
+    iconBase64: String,
+    bgColor: Int,
+    borderColor: Int,
+    accentColor: Int,
+    quantity: Int,
+    size: com.example.christmastrees.data.MarkerSize
+): Bitmap {
+    val bitmapSize = size.iconSize
+    val bitmap = Bitmap.createBitmap(bitmapSize, bitmapSize, Bitmap.Config.ARGB_8888)
+    val canvas = Canvas(bitmap)
+    val cx = bitmapSize / 2f
+    val cy = bitmapSize / 2f
+
+    val iconBytes = try {
+        android.util.Base64.decode(iconBase64, android.util.Base64.NO_WRAP)
+    } catch (e: Exception) {
+        byteArrayOf()
+    }
+    val iconBitmap = BitmapFactory.decodeByteArray(iconBytes, 0, iconBytes.size)
+
+    val bgPaint = Paint().apply { color = bgColor; isAntiAlias = true }
+    canvas.drawCircle(cx, cy, bitmapSize / 2f, bgPaint)
+
+    val borderPaint = Paint().apply {
+        color = borderColor
+        strokeWidth = (3f * size.iconScale).coerceAtMost(5f)
+        isAntiAlias = true
+        style = Paint.Style.STROKE
+    }
+    canvas.drawCircle(cx, cy, bitmapSize / 2f - 2f, borderPaint)
+
+    if (iconBitmap != null && iconBitmap.width > 0) {
+        val scale = ((bitmapSize - 20) / iconBitmap.width.toFloat()).coerceAtMost(
+            ((bitmapSize - 20) / iconBitmap.height.toFloat()).coerceAtMost(1f)
+        )
+        val iconSize = (iconBitmap.width * scale).toInt()
+        val iconX = (bitmapSize - iconSize) / 2f
+        val iconY = (bitmapSize - iconSize) / 2f
+        canvas.drawBitmap(iconBitmap, null, android.graphics.RectF(iconX, iconY, iconX + iconSize, iconY + iconSize), null)
+    }
+
+    if (quantity > 1) {
+        val badgeRadius = (20f * size.iconScale).coerceAtMost(25f)
+        val badgeX = bitmapSize - 18f * size.iconScale
+        val badgeY = 18f * size.iconScale
+        val badgePaint = Paint().apply { color = accentColor; isAntiAlias = true }
+        canvas.drawCircle(badgeX, badgeY, badgeRadius, badgePaint)
+        val badgeTextPaint = Paint().apply {
+            color = AndroidColor.WHITE
+            textSize = (20f * size.iconScale).coerceAtMost(24f)
+            isAntiAlias = true
+            textAlign = Paint.Align.CENTER
+        }
+        canvas.drawText(quantity.toString(), badgeX, badgeY + (7f * size.iconScale).toFloat(), badgeTextPaint)
+    }
+
+    if (size == com.example.christmastrees.data.MarkerSize.BOSS) {
+        val starPaint = Paint().apply { color = AndroidColor.parseColor("#FFD700"); isAntiAlias = true }
+        val starPositions = listOf(
+            Pair(cx, 8f * size.iconScale), Pair(bitmapSize - 8f * size.iconScale, cy),
+            Pair(cx, bitmapSize - 8f * size.iconScale), Pair(8f * size.iconScale, cy)
+        )
+        for ((sx, sy) in starPositions) {
+            canvas.drawCircle(sx, sy, 3f * size.iconScale, starPaint)
+        }
+    }
+
+    return bitmap
+}
+
+@Composable
+private fun CustomCounterCard(
+    name: String,
+    count: Int,
+    smallCount: Int,
+    normalCount: Int,
+    bossCount: Int,
+    iconBase64: String = "",
+    modifier: Modifier = Modifier
+) {
+    var expanded by remember { mutableStateOf(false) }
+    val iconBitmap by remember(iconBase64) {
+        mutableStateOf(
+            if (iconBase64.isNotBlank()) {
+                try {
+                    val bytes = android.util.Base64.decode(iconBase64, android.util.Base64.NO_WRAP)
+                    BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+                } catch (e: Exception) { null }
+            } else { null }
+        )
+    }
+
+    Card(
+        modifier = modifier
+            .wrapContentWidth()
+            .height(if (expanded) 128.dp else 32.dp)
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                onClick = { expanded = !expanded }
+            ),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.tertiary),
+        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
+        shape = RoundedCornerShape(16.dp)
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Top,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 8.dp, vertical = 4.dp)
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(2.dp)
+            ) {
+                if (iconBitmap != null) {
+                    Image(
+                        bitmap = iconBitmap!!.asImageBitmap(),
+                        contentDescription = name,
+                        modifier = Modifier.size(18.dp)
+                    )
+                } else {
+                    Text(text = "📌", fontSize = 14.sp)
+                }
+                Text(
+                    text = count.toString(),
+                    style = MaterialTheme.typography.titleSmall,
+                    color = MaterialTheme.colorScheme.onTertiary
+                )
+                Icon(
+                    imageVector = if (expanded) androidx.compose.material.icons.Icons.Default.KeyboardArrowUp
+                    else androidx.compose.material.icons.Icons.Default.KeyboardArrowDown,
+                    contentDescription = if (expanded) "Свернуть" else "Развернуть",
+                    tint = MaterialTheme.colorScheme.onTertiary,
+                    modifier = Modifier.size(16.dp)
+                )
+            }
+
+            if (expanded) {
+                HorizontalDivider(
+                    color = MaterialTheme.colorScheme.onTertiary.copy(alpha = 0.3f),
+                    modifier = Modifier.padding(vertical = 4.dp)
+                )
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(2.dp),
+                    modifier = Modifier.padding(top = 4.dp)
+                ) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Text("🔹", fontSize = 10.sp)
+                        Text(text = smallCount.toString(), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onTertiary)
+                    }
+                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Text("🔵", fontSize = 10.sp)
+                        Text(text = normalCount.toString(), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onTertiary)
+                    }
+                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Text("🔴", fontSize = 10.sp)
+                        Text(text = bossCount.toString(), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onTertiary)
+                    }
+                }
+            }
+        }
+    }
+}
 
 private fun createLocationBitmap(zoomLevel: Double): Bitmap {
     val size = 64
@@ -1363,7 +1590,7 @@ private fun CounterCard(
     Card(
         modifier = modifier
             .wrapContentWidth()
-            .height(32.dp)
+            .height(if (expanded) 128.dp else 32.dp)
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },
                 indication = null,
@@ -1377,10 +1604,10 @@ private fun CounterCard(
     ) {
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center,
+            verticalArrangement = Arrangement.Top,
             modifier = Modifier
-                .fillMaxSize()
-                .padding(horizontal = 8.dp)
+                .fillMaxWidth()
+                .padding(horizontal = 8.dp, vertical = 4.dp)
         ) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
@@ -1418,7 +1645,7 @@ private fun CounterCard(
             }
             
             if (expanded) {
-                Divider(
+                HorizontalDivider(
                     color = MaterialTheme.colorScheme.secondary.copy(alpha = 0.3f),
                     modifier = Modifier.padding(vertical = 4.dp)
                 )
