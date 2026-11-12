@@ -42,7 +42,8 @@ enum class Category(
     TREES("Ёлки"),
     SNOWMEN("Снеговики"),
     DECORATIONS("Украшения"),
-    CHARACTERS("Персонажи");
+    CHARACTERS("Персонажи"),
+    CUSTOM("Кастомные");
 
     val emoji: String
         get() = when (this) {
@@ -50,5 +51,6 @@ enum class Category(
             SNOWMEN -> "☃️"
             DECORATIONS -> "🎁"
             CHARACTERS -> "🧌"
+            CUSTOM -> "📌"
         }
 }

@@ -22,6 +22,7 @@ import androidx.compose.ui.viewinterop.AndroidView
 import com.example.christmastrees.R
 import com.example.christmastrees.data.Category
 import com.example.christmastrees.data.MarkerType
+import com.example.christmastrees.data.CUSTOM_MARKER_PREFIX
 import com.example.christmastrees.ui.components.GarlandOverlay
 import com.example.christmastrees.ui.components.SnowfallOverlay
 import com.example.christmastrees.viewmodel.MarkersViewModel
@@ -38,9 +39,13 @@ fun ListScreen(
     // Group markers by category
     val groupedMarkers = markers.groupBy { marker ->
         try {
-            marker.markerType().category
+            try {
+                marker.markerType().category
+            } catch (e: Exception) {
+                Category.CUSTOM
+            }
         } catch (e: Exception) {
-            Category.TREES
+            Category.CUSTOM
         }
     }
 
@@ -148,26 +153,24 @@ private fun MarkerListItem(
     onDelete: () -> Unit
 ) {
     val context = LocalContext.current
-    val type by remember(marker.type) {
-        try {
-            mutableStateOf(marker.markerType())
-        } catch (e: Exception) {
-            mutableStateOf(com.example.christmastrees.data.MarkerType.CHRISTMAS_TREE)
-        }
+    val isCustom = marker.type.startsWith(CUSTOM_MARKER_PREFIX)
+    val displayEmoji = if (isCustom) "📌" else {
+        try { marker.markerType().emoji } catch (e: Exception) { "📌" }
+    }
+    val displayLabel = if (isCustom) {
+        marker.name
+    } else {
+        try { marker.markerType().label } catch (e: Exception) { "Неизвестно" }
     }
 
     Card(
         modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surface
-        ),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
         shape = MaterialTheme.shapes.medium
     ) {
         Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(12.dp),
+            modifier = Modifier.fillMaxWidth().padding(12.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -175,7 +178,13 @@ private fun MarkerListItem(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier.weight(1f)
             ) {
-                if (type == MarkerType.GRINCH) {
+                if (displayEmoji == "📌") {
+                    androidx.compose.material3.Text(
+                        text = "📌",
+                        fontSize = 32.sp,
+                        modifier = Modifier.padding(end = 12.dp)
+                    )
+                } else if (displayEmoji == MarkerType.GRINCH.emoji) {
                     AndroidView(
                         factory = { ctx ->
                             androidx.appcompat.widget.AppCompatImageView(ctx).apply {
@@ -186,14 +195,14 @@ private fun MarkerListItem(
                     )
                 } else {
                     androidx.compose.material3.Text(
-                        text = type.emoji,
+                        text = displayEmoji,
                         fontSize = 32.sp,
                         modifier = Modifier.padding(end = 12.dp)
                     )
                 }
                 Column {
                     Text(
-                        text = type.label,
+                        text = displayLabel,
                         style = MaterialTheme.typography.bodyLarge,
                         color = MaterialTheme.colorScheme.onSurface
                     )
